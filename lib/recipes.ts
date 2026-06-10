@@ -13,6 +13,9 @@ export interface RecipeContent {
   title: string;
   ingredients: string;
   steps: string;
+  // NEW: structured ingredients (amount + item). Optional so old recipes that
+  // only have the `ingredients` string still validate and render.
+  ingredientList?: { amount: string; item: string }[];
   // optional, cosmetic — does NOT affect identity/credit (that's the chain address)
   tag?: string;
   imageUrl?: string;
@@ -34,13 +37,24 @@ export interface Recipe extends RecipeContent {
  * is identical.
  */
 export function canonicalize(c: RecipeContent): string {
-  const ordered = {
+  const list = Array.isArray(c.ingredientList)
+    ? c.ingredientList
+        .map((x) => ({ amount: (x.amount ?? "").trim(), item: (x.item ?? "").trim() }))
+        .filter((x) => x.amount || x.item)
+    : [];
+  const ordered: Record<string, unknown> = {
     title: (c.title ?? "").trim(),
     ingredients: (c.ingredients ?? "").trim(),
     steps: (c.steps ?? "").trim(),
     tag: (c.tag ?? "").trim(),
     imageUrl: (c.imageUrl ?? "").trim(),
   };
+  // Only include the structured list when it has entries, so older recipes
+  // (which never had this field) hash exactly as they did before — preserving
+  // their on-chain hash verification. Key order is fixed for determinism.
+  if (list.length > 0) {
+    ordered.ingredientList = list;
+  }
   return JSON.stringify(ordered);
 }
 
