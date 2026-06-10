@@ -1,0 +1,25 @@
+{
+  "name": "lighttable",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LightTable — a community cookbook on LCAI. Share recipes, tip cooks, get on-chain AI cooking help.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@upstash/redis": "^1.34.0",
+    "ethers": "^6.13.2",
+    "next": "^16.2.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.15",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.5.4"
+  }
+}

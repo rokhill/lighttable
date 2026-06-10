@@ -1,0 +1,107 @@
+/* LightTable — LCAI brand palette, light + dark.
+   Brand: primary #5B4BFF, secondary #DD00AC, dark #14152C, light #CCCEEF,
+   gradient #5B4BFF -> #EE11FB. Amber is a functional warmth/tip accent. */
+
+:root {
+  /* LIGHT / WARM (default) */
+  --bg: #fbf7f0;
+  --bg-raised: #ffffff;
+  --bg-sunken: #f2eadb;
+  --bg-input: #fbf7f0;
+  --header-bg: #ffffff;
+  --hero-glow: #f3effe;
+
+  --text: #14152c;
+  --text-2: #6e6456;
+  --text-3: #a0937e;
+  --text-mono: #a99bbe;
+
+  --border: #efe6d8;
+  --border-2: #eae0d0;
+  --border-hover: #d9b0e8;
+
+  --brand: #5b4bff;
+  --brand-2: #dd00ac;
+  --grad: linear-gradient(135deg, #5b4bff, #ee11fb);
+  --chip-bg: #eeedfe;
+  --chip-text: #5b4bff;
+
+  --tip: #c77a12;
+  --tip-btn: #f5a623;
+  --tip-btn-text: #3a2400;
+
+  --ok: #1d9e75;
+  --ai-panel: linear-gradient(160deg, #f3effe, #fbf2fb);
+  --ai-border: #e4dcfa;
+  --ai-rule: #dd00ac;
+  --toast-bg: #14152c;
+  --toast-text: #ffffff;
+}
+
+:root.dark {
+  /* DARK / ELECTRIC */
+  --bg: #14152c;
+  --bg-raised: #1a1b38;
+  --bg-sunken: #1c1d3c;
+  --bg-input: #101126;
+  --header-bg: #14152c;
+  --hero-glow: #20214166;
+
+  --text: #ffffff;
+  --text-2: #a6a4ce;
+  --text-3: #7e7caa;
+  --text-mono: #6e6c98;
+
+  --border: #2a2b4a;
+  --border-2: #2e2f5c;
+  --border-hover: #3a3b6a;
+
+  --brand: #7d70ff;
+  --brand-2: #ee11fb;
+  --grad: linear-gradient(135deg, #5b4bff, #ee11fb);
+  --chip-bg: #26284e;
+  --chip-text: #ccceef;
+
+  --tip: #ffb454;
+  --tip-btn: #ffb454;
+  --tip-btn-text: #3a2400;
+
+  --ok: #48e5a8;
+  --ai-panel: linear-gradient(160deg, #1d1b44, #1a1b38);
+  --ai-border: #3a2a6a;
+  --ai-rule: #ee11fb;
+  --toast-bg: #2e2f5c;
+  --toast-text: #ffffff;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Inter, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.serif { font-family: Georgia, "Times New Roman", serif; }
+
+button { font-family: inherit; }
+
+input, textarea {
+  font-family: inherit;
+  outline: none;
+}
+input:focus, textarea:focus {
+  border-color: var(--brand) !important;
+}
+
+a { color: var(--brand); }
+
+::placeholder { color: var(--text-3); opacity: 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
