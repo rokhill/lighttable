@@ -68,3 +68,46 @@ export async function getManyRecipeTexts(
   });
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// Profile names — address -> display name. Cosmetic only; the on-chain creator
+// address is the real identity, names just skin it. One record per address so
+// changing a name updates everywhere at once.
+// ---------------------------------------------------------------------------
+
+const PROFILES_KEY = "profiles"; // hash map: address(lower) -> name
+
+export async function setProfileName(address: string, name: string): Promise<void> {
+  const clean = name.trim().slice(0, 32);
+  if (!clean) {
+    await redis().hdel(PROFILES_KEY, address.toLowerCase());
+    return;
+  }
+  await redis().hset(PROFILES_KEY, { [address.toLowerCase()]: clean });
+}
+
+export async function getAllProfiles(): Promise<Record<string, string>> {
+  const all = await redis().hgetall<Record<string, string>>(PROFILES_KEY);
+  return all || {};
+}
+
+// ---------------------------------------------------------------------------
+// Hide-list — owner moderation. A set of recipe ids hidden from the UI. The
+// recipe still exists on-chain (nothing is truly deleted); the frontend just
+// stops showing it. Honest: "hidden by moderator", not "deleted".
+// ---------------------------------------------------------------------------
+
+const HIDDEN_KEY = "hidden"; // set of recipe id strings
+
+export async function hideRecipe(id: number): Promise<void> {
+  await redis().sadd(HIDDEN_KEY, String(id));
+}
+
+export async function unhideRecipe(id: number): Promise<void> {
+  await redis().srem(HIDDEN_KEY, String(id));
+}
+
+export async function getHiddenIds(): Promise<number[]> {
+  const members = await redis().smembers(HIDDEN_KEY);
+  return (members || []).map((m) => Number(m)).filter((n) => !Number.isNaN(n));
+}
