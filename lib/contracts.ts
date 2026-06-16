@@ -45,17 +45,89 @@ declare global {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Active wallet provider.
+//
+// The app can connect through TWO kinds of wallet:
+//   1. Injected (desktop MetaMask / browser extension) — window.ethereum
+//   2. WalletConnect (mobile wallets via QR / deep-link)
+//
+// We keep a single "active EIP-1193 provider" reference. Everything downstream
+// (getSigner, getRecipeBookWrite, switchToLCAI, balance reads) uses whichever
+// is active, so the rest of the app doesn't care which kind it is — it always
+// gets a normal ethers signer.
+// ---------------------------------------------------------------------------
+
+// The raw EIP-1193 provider currently in use (injected object or WC provider).
+let activeEip1193: any = null;
+
+/** The WalletConnect Project ID. Public by design (ships in client code). */
+const WC_PROJECT_ID =
+  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "00ec98e22aae6c43c00e7a3fa1e77252";
+
 /** Read-only provider straight to the LCAI RPC (no wallet needed for browsing). */
 export function getReadProvider(): ethers.JsonRpcProvider {
   return new ethers.JsonRpcProvider(CHAIN.rpc, CHAIN.id);
 }
 
-/** Browser provider over the injected wallet (MetaMask). */
-export function getProvider(): ethers.BrowserProvider {
-  if (typeof window === "undefined" || !window.ethereum) {
-    throw new Error("No wallet found. Install MetaMask to continue.");
+/** True if a desktop/extension wallet is injected in this browser. */
+export function hasInjected(): boolean {
+  return typeof window !== "undefined" && !!window.ethereum;
+}
+
+/** Connect via the injected wallet (MetaMask extension). Sets it active. */
+export async function connectInjected(): Promise<void> {
+  if (!hasInjected()) {
+    throw new Error("No browser wallet found. Use WalletConnect, or install MetaMask.");
   }
-  return new ethers.BrowserProvider(window.ethereum);
+  await window.ethereum.request({ method: "eth_requestAccounts" });
+  activeEip1193 = window.ethereum;
+}
+
+/** Connect via WalletConnect (mobile wallets, QR / deep-link). Sets it active. */
+export async function connectWalletConnect(): Promise<void> {
+  // Dynamic import keeps this large dependency out of the initial bundle and
+  // off the server — it only loads when a user actually picks WalletConnect.
+  const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
+  const wc = await EthereumProvider.init({
+    projectId: WC_PROJECT_ID,
+    chains: [CHAIN.id],
+    showQrModal: true,
+    rpcMap: { [CHAIN.id]: CHAIN.rpc },
+    metadata: {
+      name: "LightTable",
+      description: "A community cookbook on LCAI.",
+      url: "https://lighttable.vercel.app",
+      icons: ["https://lighttable.vercel.app/icon.png"],
+    },
+  });
+  await wc.connect(); // opens the QR / deep-link modal
+  activeEip1193 = wc;
+}
+
+/** The currently-active EIP-1193 provider, or null if not connected. */
+export function getActiveEip1193(): any {
+  return activeEip1193;
+}
+
+/** Clear the active wallet (disconnect). */
+export async function disconnectWallet(): Promise<void> {
+  try {
+    if (activeEip1193 && typeof activeEip1193.disconnect === "function") {
+      await activeEip1193.disconnect();
+    }
+  } catch { /* ignore */ }
+  activeEip1193 = null;
+}
+
+/** Browser provider over whichever wallet is active. Falls back to injected
+ *  (preserves old behavior for any code path that connects before choosing). */
+export function getProvider(): ethers.BrowserProvider {
+  const eip = activeEip1193 || (hasInjected() ? window.ethereum : null);
+  if (!eip) {
+    throw new Error("No wallet connected. Tap Connect to choose a wallet.");
+  }
+  return new ethers.BrowserProvider(eip);
 }
 
 export async function getSigner(): Promise<ethers.JsonRpcSigner> {
@@ -83,16 +155,17 @@ export async function getRecipeBookWrite(): Promise<ethers.Contract> {
 // ---------------------------------------------------------------------------
 
 export async function switchToLCAI(): Promise<void> {
-  if (!window.ethereum) throw new Error("No wallet found.");
+  const eip = activeEip1193 || (hasInjected() ? window.ethereum : null);
+  if (!eip) throw new Error("No wallet connected.");
   try {
-    await window.ethereum.request({
+    await eip.request({
       method: "wallet_switchEthereumChain",
       params: [{ chainId: CHAIN.idHex }],
     });
   } catch (err: any) {
     // 4902 = chain not added to the wallet yet
     if (err.code === 4902) {
-      await window.ethereum.request({
+      await eip.request({
         method: "wallet_addEthereumChain",
         params: [
           {

@@ -12,6 +12,10 @@ import {
   formatLCAI,
   parseLCAI,
   shortAddr,
+  hasInjected,
+  connectInjected,
+  connectWalletConnect,
+  disconnectWallet,
 } from "@/lib/contracts";
 import { hashContent, verifyContent, type Recipe, type RecipeContent } from "@/lib/recipes";
 import { profileMessage, moderationMessage, nameFor } from "@/lib/profileNames";
@@ -55,6 +59,7 @@ export default function Home() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [nameModal, setNameModal] = useState(false);
   const [nameInput, setNameInput] = useState("");
+  const [walletModal, setWalletModal] = useState(false);
 
   // ai
   const [aiQ, setAiQ] = useState("");
@@ -143,19 +148,41 @@ export default function Home() {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   // ---- wallet ----
-  const connect = async () => {
+  // Open the chooser. On desktop with an injected wallet we *could* auto-connect,
+  // but showing the choice is what fixes mobile + multi-wallet, so we always ask.
+  const connect = () => setWalletModal(true);
+
+  // Finish a connection once the user has picked a method.
+  const finishConnect = async (method: "injected" | "walletconnect") => {
+    setWalletModal(false);
+    setBusy(true);
     try {
-      if (typeof window === "undefined" || !(window as any).ethereum) {
-        return showToast("No wallet found. Install MetaMask.", "err");
+      if (method === "injected") {
+        await connectInjected();
+      } else {
+        await connectWalletConnect();
       }
-      await (window as any).ethereum.request({ method: "eth_requestAccounts" });
       await switchToLCAI();
       const signer = await getSigner();
       const addr = await signer.getAddress();
       const bal = await getReadProvider().getBalance(addr);
       setWallet(addr); setBalance(formatLCAI(bal));
       showToast("Wallet connected.", "ok");
-    } catch (e: any) { showToast(e?.message || "Couldn't connect.", "err"); }
+    } catch (e: any) {
+      const m = e?.message || "Couldn't connect.";
+      // User closing the WalletConnect QR modal throws — treat as a quiet cancel.
+      if (/User (rejected|closed)|Connection request reset|Modal closed/i.test(m)) {
+        showToast("Connection cancelled.", "info");
+      } else {
+        showToast(m, "err");
+      }
+    } finally { setBusy(false); }
+  };
+
+  const disconnect = async () => {
+    await disconnectWallet();
+    setWallet(null); setBalance("0");
+    showToast("Wallet disconnected.", "info");
   };
 
   // ---- submit ----
@@ -640,6 +667,26 @@ export default function Home() {
         </div>
       )}
 
+      {/* wallet chooser modal */}
+      {walletModal && (
+        <div onClick={() => setWalletModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 14, padding: 22, maxWidth: 360, width: "100%" }}>
+            <p className="serif" style={{ fontSize: 18, color: C, margin: "0 0 4px" }}>Connect a wallet</p>
+            <p style={{ fontSize: 12, color: C2, margin: "0 0 18px" }}>Pick how you'd like to connect. On a phone, use WalletConnect.</p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button onClick={() => finishConnect("injected")} disabled={busy || !hasInjected()} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--bg-sunken)", border: "1px solid var(--border-2)", color: C, padding: "13px 15px", borderRadius: 11, fontSize: 14, fontWeight: 500, cursor: hasInjected() ? "pointer" : "not-allowed", opacity: hasInjected() ? 1 : 0.5, textAlign: "left" }}>
+                <i className="ti ti-browser" style={{ fontSize: 20, color: "var(--brand-2)" }} aria-hidden />
+                <span style={{ flex: 1 }}>Browser wallet<br /><span style={{ fontSize: 11, color: C3, fontWeight: 400 }}>{hasInjected() ? "MetaMask or similar extension" : "No extension detected"}</span></span>
+              </button>
+              <button onClick={() => finishConnect("walletconnect")} disabled={busy} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--bg-sunken)", border: "1px solid var(--border-2)", color: C, padding: "13px 15px", borderRadius: 11, fontSize: 14, fontWeight: 500, cursor: "pointer", textAlign: "left" }}>
+                <i className="ti ti-qrcode" style={{ fontSize: 20, color: "var(--brand-2)" }} aria-hidden />
+                <span style={{ flex: 1 }}>WalletConnect<br /><span style={{ fontSize: 11, color: C3, fontWeight: 400 }}>Phone wallets — scan a QR or open your app</span></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* name modal */}
       {nameModal && (
         <div onClick={() => setNameModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
@@ -647,9 +694,12 @@ export default function Home() {
             <p className="serif" style={{ fontSize: 18, color: C, margin: "0 0 4px" }}>Display name</p>
             <p style={{ fontSize: 12, color: C2, margin: "0 0 16px" }}>A friendly name shown on your recipes. Cosmetic — your wallet address stays your real identity. You'll sign to prove it's you (free, no gas).</p>
             <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} maxLength={32} placeholder="ChefRok" style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "10px 12px", fontSize: 14, color: C, marginBottom: 16 }} />
-            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              <button onClick={() => setNameModal(false)} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C2, padding: "8px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>Cancel</button>
-              <button onClick={saveName} disabled={busy} style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: busy ? "wait" : "pointer" }}>{busy ? "Saving…" : "Sign & save"}</button>
+            <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
+              <button onClick={async () => { setNameModal(false); await disconnect(); }} style={{ background: "transparent", border: "none", color: C3, padding: "8px 4px", fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>Disconnect</button>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={() => setNameModal(false)} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C2, padding: "8px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>Cancel</button>
+                <button onClick={saveName} disabled={busy} style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: busy ? "wait" : "pointer" }}>{busy ? "Saving…" : "Sign & save"}</button>
+              </div>
             </div>
           </div>
         </div>
