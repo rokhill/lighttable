@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { ethers } from "ethers";
 import {
   CHAIN,
+  CONTRACTS,
   getSigner,
   getReadProvider,
   getRecipeBookRead,
@@ -16,6 +17,7 @@ import {
   connectInjected,
   connectWalletConnect,
   disconnectWallet,
+  buildTxOverrides,
 } from "@/lib/contracts";
 import { hashContent, verifyContent, type Recipe, type RecipeContent } from "@/lib/recipes";
 import { profileMessage, moderationMessage, nameFor } from "@/lib/profileNames";
@@ -211,8 +213,15 @@ export default function Home() {
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Couldn't save text.");
       const { hash } = await res.json();
       if (hash.toLowerCase() !== hashContent(content).toLowerCase()) throw new Error("Hash mismatch — retry.");
-      const tx = await c.submitRecipe(hash);
-      showToast("Publishing… confirm in wallet.", "info");
+      // Tell the user to expect the wallet BEFORE it pops, so the prompt isn't a surprise.
+      showToast("Confirm the transaction in your wallet…", "info");
+      const ov = await buildTxOverrides({
+        to: CONTRACTS.recipeBook,
+        from: wallet,
+        data: c.interface.encodeFunctionData("submitRecipe", [hash]),
+      });
+      const tx = await c.submitRecipe(hash, ov);
+      showToast("Publishing to LCAI — this takes a few seconds…", "info");
       await tx.wait(1);
       setFTitle(""); setFIngRows([{ amount: "", item: "" }]); setFSteps(""); setFTag(""); setFCat("Dinner");
       setTab("browse"); showToast("Recipe published. Hash anchored on-chain.", "ok");
@@ -230,8 +239,16 @@ export default function Home() {
     setBusy(true);
     try {
       const c = await getRecipeBookWrite();
-      const tx = await c.tip(tipFor.id, { value: parseLCAI(tipAmt) });
-      showToast("Tipping… confirm in wallet.", "info");
+      showToast("Confirm the tip in your wallet…", "info");
+      const val = parseLCAI(tipAmt);
+      const ov = await buildTxOverrides({
+        to: CONTRACTS.recipeBook,
+        from: wallet,
+        data: c.interface.encodeFunctionData("tip", [tipFor.id]),
+        value: val,
+      });
+      const tx = await c.tip(tipFor.id, { value: val, ...ov });
+      showToast("Sending tip — a few seconds…", "info");
       await tx.wait(1);
       setTipFor(null);
       showToast(`Tipped ${amt} LCAI — 95% to the cook, 5% platform.`, "ok");
@@ -246,7 +263,12 @@ export default function Home() {
     setBusy(true);
     try {
       const c = await getRecipeBookWrite();
-      const tx = await c.upvote(r.id); await tx.wait(1);
+      const ov = await buildTxOverrides({
+        to: CONTRACTS.recipeBook,
+        from: wallet!,
+        data: c.interface.encodeFunctionData("upvote", [r.id]),
+      });
+      const tx = await c.upvote(r.id, ov); await tx.wait(1);
       showToast("Upvoted — recorded on-chain.", "ok"); await loadAll();
     } catch (e: any) {
       const m = e?.reason || e?.message || "";

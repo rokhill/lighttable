@@ -211,3 +211,43 @@ export function explorerTx(hash: string): string {
 export function explorerAddr(addr: string): string {
   return `${CHAIN.explorer}/address/${addr}`;
 }
+
+// ---------------------------------------------------------------------------
+// Transaction overrides — the WalletConnect double-prompt fix.
+//
+// ethers v6 BrowserProvider, before sending a tx, asks the wallet to do
+// eth_estimateGas and fee lookups. Over WalletConnect each of those round-trips
+// surfaces the wallet app, so the user sees "sign… now open your wallet AGAIN
+// to complete." By pre-computing gas + fees here against the READ rpc (not the
+// wallet) and passing them in, ethers skips its own estimation and the wallet
+// gets exactly ONE request: the send. One prompt, no second hand-off.
+//
+// `from` is required for an accurate estimate; `value` covers tips.
+// ---------------------------------------------------------------------------
+export async function buildTxOverrides(
+  data: { to: string; from: string; data?: string; value?: bigint }
+): Promise<{ gasLimit: bigint; gasPrice: bigint }> {
+  const rp = getReadProvider();
+  let gasLimit: bigint;
+  try {
+    const est = await rp.estimateGas({
+      to: data.to,
+      from: data.from,
+      data: data.data,
+      value: data.value ?? 0n,
+    });
+    // 25% headroom so a slightly-off estimate doesn't revert.
+    gasLimit = (est * 125n) / 100n;
+  } catch {
+    // Fallback if estimate fails — generous fixed limit for these simple calls.
+    gasLimit = 300000n;
+  }
+  let gasPrice: bigint;
+  try {
+    const fee = await rp.getFeeData();
+    gasPrice = fee.gasPrice ?? ethers.parseUnits("1", "gwei");
+  } catch {
+    gasPrice = ethers.parseUnits("1", "gwei");
+  }
+  return { gasLimit, gasPrice };
+}
