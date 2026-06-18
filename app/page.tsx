@@ -542,7 +542,7 @@ export default function Home() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <i className={open ? "ti ti-chevron-down" : "ti ti-chevron-right"} style={{ fontSize: 15, color: C3, flexShrink: 0 }} aria-hidden />
-              <p className="serif" style={{ fontSize: 17, margin: 0, color: C, lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</p>
+              <p className="serif" style={{ fontSize: 17, margin: 0, color: C, lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{r.title}</p>
               {r.hashVerified && <span title="Off-chain text matches the on-chain hash" style={{ color: "var(--ok)", fontSize: 13, flexShrink: 0 }}><i className="ti ti-rosette-discount-check" aria-hidden /></span>}
               {isHidden && <span style={{ fontSize: 10, color: "#c98", border: "1px solid #c98", borderRadius: 12, padding: "1px 7px", flexShrink: 0 }}>hidden</span>}
             </div>
