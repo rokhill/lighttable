@@ -500,7 +500,12 @@ export default function Home() {
             <span style={{ fontSize: 12, color: C3 }}><i className="ti ti-circle-filled" style={{ fontSize: 8, color: "var(--ok)", verticalAlign: 1 }} aria-hidden /> 9200</span>
             <button onClick={toggleTheme} aria-label="Toggle theme" style={{ background: "transparent", border: "1px solid var(--border-2)", color: C2, width: 34, height: 34, borderRadius: 9, cursor: "pointer" }}><i className={dark ? "ti ti-sun" : "ti ti-moon"} style={{ fontSize: 16 }} aria-hidden /></button>
             {wallet ? (
-              <button onClick={() => { setNameInput(profiles[wallet.toLowerCase()] || ""); setNameModal(true); }} style={{ background: "var(--bg-sunken)", color: C, border: "none", padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>{nameFor(wallet, profiles)} · {balance}</button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {!profiles[wallet.toLowerCase()]?.trim() && (
+                  <button onClick={() => { setNameInput(""); setNameModal(true); }} title="Pick a chef name so people know who's cooking" style={{ background: "var(--chip-bg)", color: "var(--chip-text)", border: "1px solid var(--ai-border)", padding: "5px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-chef-hat" style={{ fontSize: 12, verticalAlign: -1, marginRight: 3 }} aria-hidden />Set chef name</button>
+                )}
+                <button onClick={() => { setNameInput(profiles[wallet.toLowerCase()] || ""); setNameModal(true); }} title="Click to set or edit your chef name" style={{ background: "var(--bg-sunken)", color: C, border: "none", padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>{nameFor(wallet, profiles)} · {balance}</button>
+              </div>
             ) : (
               <button onClick={connect} style={{ background: "var(--grad)", color: "#fff", border: "none", padding: "8px 17px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Connect wallet</button>
             )}
