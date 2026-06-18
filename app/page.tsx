@@ -49,6 +49,8 @@ export default function Home() {
   // filters
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("All");
+  const [sortBy, setSortBy] = useState<"newest" | "top" | "upvoted">("newest");
+  const [lbMode, setLbMode] = useState<"cooks" | "recipes">("cooks");
 
   // submit form
   const [fTitle, setFTitle] = useState("");
@@ -393,8 +395,14 @@ export default function Home() {
         (r.tag || "").toLowerCase().includes(q) ||
         nameFor(r.creator, profiles).toLowerCase().includes(q));
     }
-    return list;
-  }, [recipes, hidden, isOwner, cat, search, profiles]);
+    // Sort. "Newest" is the default and preserves deploy order (newest first),
+    // so a user still sees their just-posted recipe at the top.
+    const sorted = [...list];
+    if (sortBy === "top") sorted.sort((a, b) => b.tipsTotal - a.tipsTotal || b.upvotes - a.upvotes);
+    else if (sortBy === "upvoted") sorted.sort((a, b) => b.upvotes - a.upvotes || b.tipsTotal - a.tipsTotal);
+    else sorted.sort((a, b) => b.createdAt - a.createdAt); // newest (default)
+    return sorted;
+  }, [recipes, hidden, isOwner, cat, search, profiles, sortBy]);
 
   const leaders = useMemo(() => {
     const byCreator: Record<string, { addr: string; tips: number; upvotes: number; count: number }> = {};
@@ -405,6 +413,21 @@ export default function Home() {
     });
     return Object.values(byCreator).sort((a, b) => b.tips - a.tips || b.upvotes - a.upvotes);
   }, [recipes, hidden]);
+
+  // Top individual recipes — ranked by tips, then upvotes.
+  const topRecipes = useMemo(() => {
+    return recipes
+      .filter((r) => !hidden.includes(r.id))
+      .slice()
+      .sort((a, b) => b.tipsTotal - a.tipsTotal || b.upvotes - a.upvotes);
+  }, [recipes, hidden]);
+
+  // The connected user's rank among cooks (for the "your rank" line).
+  const myRank = useMemo(() => {
+    if (!wallet) return null;
+    const idx = leaders.findIndex((l) => l.addr.toLowerCase() === wallet.toLowerCase());
+    return idx >= 0 ? { rank: idx + 1, of: leaders.length, ...leaders[idx] } : null;
+  }, [leaders, wallet]);
 
   const myRecipes = useMemo(() =>
     wallet ? recipes.filter((r) => r.creator.toLowerCase() === wallet.toLowerCase()) : [],
@@ -517,9 +540,21 @@ export default function Home() {
           <p style={{ fontSize: 14, color: C2, margin: "0 auto 20px", maxWidth: 440, lineHeight: 1.6 }}>A community cookbook where good recipes earn their keep. Post a dish, tip the cooks you love in LCAI.</p>
           <div style={{ display: "inline-flex", gap: 4, background: "var(--bg-sunken)", padding: 5, borderRadius: 11, flexWrap: "wrap", justifyContent: "center" }}>
             {tabs.map(([t, label]) => (
-              <button key={t} onClick={() => setTab(t)} style={{ border: "none", padding: "7px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", background: tab === t ? "var(--bg-raised)" : "transparent", color: tab === t ? C : C3 }}>{label}</button>
+              <button key={t} onClick={() => setTab(t)} style={{ border: "none", padding: "7px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", background: tab === t ? "var(--bg-raised)" : "transparent", color: t === "ai" && tab !== t ? "var(--brand-2)" : tab === t ? C : C3, whiteSpace: "nowrap" }}>{t === "ai" && <i className="ti ti-sparkles" style={{ fontSize: 12, verticalAlign: -1, marginRight: 3 }} aria-hidden />}{label}</button>
             ))}
           </div>
+          {tab !== "ai" && (
+            <button onClick={() => setTab("ai")} style={{ display: "block", margin: "16px auto 0", maxWidth: 440, width: "100%", background: "var(--ai-panel)", border: "1px solid var(--ai-border)", borderRadius: 11, padding: "11px 16px", cursor: "pointer", textAlign: "left" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
+                <i className="ti ti-sparkles" style={{ fontSize: 18, color: "var(--brand-2)", flexShrink: 0 }} aria-hidden />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 13, fontWeight: 500, color: C }}>Ask the Kitchen</span>
+                  <span style={{ display: "block", fontSize: 11.5, color: C2, lineHeight: 1.45 }}>Adapt any recipe or ask a cooking question — answered by real on-chain LCAI inference.</span>
+                </span>
+                <i className="ti ti-arrow-right" style={{ fontSize: 15, color: "var(--brand-2)", flexShrink: 0 }} aria-hidden />
+              </span>
+            </button>
+          )}
         </section>
 
         <div style={{ padding: "6px 22px 48px" }}>
@@ -536,6 +571,12 @@ export default function Home() {
               <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 6 }}>
                 {CATEGORIES.map((ct) => (
                   <button key={ct} onClick={() => setCat(ct)} style={{ whiteSpace: "nowrap", border: "1px solid var(--border-2)", background: cat === ct ? "var(--grad)" : "transparent", color: cat === ct ? "#fff" : C2, padding: "5px 12px", borderRadius: 20, fontSize: 12, cursor: "pointer" }}>{ct}</button>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 12 }}>
+                <span style={{ fontSize: 11, color: C3, textTransform: "uppercase", letterSpacing: 0.5, marginRight: 2 }}>Sort</span>
+                {([["newest", "Newest"], ["top", "Top tipped"], ["upvoted", "Most upvoted"]] as const).map(([s, label]) => (
+                  <button key={s} onClick={() => setSortBy(s)} style={{ whiteSpace: "nowrap", border: "1px solid var(--border-2)", background: sortBy === s ? "var(--bg-raised)" : "transparent", color: sortBy === s ? C : C3, padding: "4px 11px", borderRadius: 20, fontSize: 12, fontWeight: sortBy === s ? 500 : 400, cursor: "pointer" }}>{label}</button>
                 ))}
               </div>
 
@@ -556,23 +597,65 @@ export default function Home() {
           {/* LEADERBOARD */}
           {tab === "leaderboard" && (
             <div style={{ marginTop: 12 }}>
-              <p style={{ fontSize: 11, color: C3, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 14px" }}>Top cooks by tips earned</p>
-              {leaders.length === 0 ? (
-                <p style={{ fontSize: 14, color: C2, textAlign: "center", padding: "40px 0" }}>No tipped recipes yet — be the first to support a cook.</p>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {leaders.map((l, i) => (
-                    <div key={l.addr} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 11, padding: "12px 16px" }}>
-                      <span style={{ fontSize: 16, fontWeight: 600, color: i < 3 ? "var(--brand-2)" : C3, width: 24, textAlign: "center" }}>{i + 1}</span>
-                      <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--grad)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, color: "#fff" }}>{nameFor(l.addr, profiles).slice(0, 2).toUpperCase()}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 14, color: C, margin: 0, fontWeight: 500 }}>{nameFor(l.addr, profiles)}</p>
-                        <p style={{ fontSize: 11, color: C3, margin: 0 }}>{l.count} recipe{l.count !== 1 ? "s" : ""} · {l.upvotes} upvotes</p>
-                      </div>
-                      <span style={{ fontSize: 16, fontWeight: 600, color: "var(--tip)" }}>{l.tips.toFixed(2)}</span>
-                    </div>
-                  ))}
+              <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+                {([["cooks", "Top Cooks"], ["recipes", "Top Recipes"]] as const).map(([m, label]) => (
+                  <button key={m} onClick={() => setLbMode(m)} style={{ border: "1px solid var(--border-2)", background: lbMode === m ? "var(--grad)" : "transparent", color: lbMode === m ? "#fff" : C2, padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{label}</button>
+                ))}
+              </div>
+
+              {/* your rank (cooks view, connected, ranked) */}
+              {lbMode === "cooks" && myRank && (
+                <div style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--ai-panel)", border: "1px solid var(--ai-border)", borderRadius: 11, padding: "10px 16px", marginBottom: 12 }}>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: "var(--brand-2)", width: 24, textAlign: "center" }}>#{myRank.rank}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, color: C, margin: 0, fontWeight: 500 }}>You — {nameFor(myRank.addr, profiles)}</p>
+                    <p style={{ fontSize: 11, color: C3, margin: 0 }}>#{myRank.rank} of {myRank.of} cooks · {myRank.count} recipe{myRank.count !== 1 ? "s" : ""} · {myRank.upvotes} upvotes</p>
+                  </div>
+                  <span style={{ fontSize: 15, fontWeight: 600, color: "var(--tip)" }}>{myRank.tips.toFixed(2)}</span>
                 </div>
+              )}
+
+              {lbMode === "cooks" ? (
+                <>
+                  <p style={{ fontSize: 11, color: C3, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 14px" }}>Top cooks by tips earned</p>
+                  {leaders.length === 0 ? (
+                    <p style={{ fontSize: 14, color: C2, textAlign: "center", padding: "40px 0" }}>No tipped recipes yet — be the first to support a cook.</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {leaders.map((l, i) => (
+                        <div key={l.addr} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 11, padding: "12px 16px", outline: wallet && l.addr.toLowerCase() === wallet.toLowerCase() ? "1px solid var(--brand-2)" : "none" }}>
+                          <span style={{ fontSize: 16, fontWeight: 600, color: i < 3 ? "var(--brand-2)" : C3, width: 24, textAlign: "center" }}>{i === 0 ? "🏆" : i + 1}</span>
+                          <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--grad)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, color: "#fff" }}>{nameFor(l.addr, profiles).slice(0, 2).toUpperCase()}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 14, color: C, margin: 0, fontWeight: 500 }}>{nameFor(l.addr, profiles)}</p>
+                            <p style={{ fontSize: 11, color: C3, margin: 0 }}>{l.count} recipe{l.count !== 1 ? "s" : ""} · {l.upvotes} upvotes</p>
+                          </div>
+                          <span style={{ fontSize: 16, fontWeight: 600, color: "var(--tip)" }}>{l.tips.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: 11, color: C3, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 14px" }}>Top recipes by tips earned</p>
+                  {topRecipes.length === 0 ? (
+                    <p style={{ fontSize: 14, color: C2, textAlign: "center", padding: "40px 0" }}>No recipes yet.</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {topRecipes.map((r, i) => (
+                        <div key={r.id} onClick={() => { setCat("All"); setSortBy("top"); setTab("browse"); }} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 11, padding: "12px 16px", cursor: "pointer" }}>
+                          <span style={{ fontSize: 16, fontWeight: 600, color: i < 3 ? "var(--brand-2)" : C3, width: 24, textAlign: "center" }}>{i === 0 ? "🏆" : i + 1}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 14, color: C, margin: 0, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</p>
+                            <p style={{ fontSize: 11, color: C3, margin: 0 }}>{nameFor(r.creator, profiles)} · {r.upvotes} upvotes</p>
+                          </div>
+                          <span style={{ fontSize: 16, fontWeight: 600, color: "var(--tip)" }}>{r.tipsTotal.toFixed(2)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
