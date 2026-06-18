@@ -124,8 +124,18 @@ export async function connectWalletConnect(): Promise<void> {
 // null if there's no live session to restore.
 export async function restoreWalletConnect(): Promise<string | null> {
   try {
+    if (typeof window === "undefined") return null;
+    // Only attempt a restore if WalletConnect actually stored a session before.
+    // Checking localStorage first avoids spinning up the WC modal machinery on
+    // a fresh load (which can throw / pop the QR and break the page).
+    let hasStored = false;
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) || "";
+      if (k.startsWith("wc@2") || k.includes("walletconnect")) { hasStored = true; break; }
+    }
+    if (!hasStored) return null;
+
     const wc = await initWalletConnect();
-    // EthereumProvider.init rehydrates an existing session if one is stored.
     if (wc.session && wc.accounts && wc.accounts.length > 0) {
       activeEip1193 = wc;
       return wc.accounts[0];
@@ -180,8 +190,12 @@ export function getRecipeBookRead(): ethers.Contract {
 export async function ensureLCAI(): Promise<void> {
   try {
     const signer = await getSigner();
-    const net = await signer.provider.getNetwork();
-    if (Number(net.chainId) === CHAIN.id) return; // already on LCAI
+    // The chain-check itself can hang over WalletConnect, so cap it.
+    const net = await Promise.race([
+      signer.provider.getNetwork(),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+    ]);
+    if (net && Number((net as any).chainId) === CHAIN.id) return; // already on LCAI
   } catch { /* can't read — attempt switch */ }
   try {
     await Promise.race([
@@ -189,6 +203,23 @@ export async function ensureLCAI(): Promise<void> {
       new Promise((resolve) => setTimeout(resolve, 8000)),
     ]);
   } catch { /* rejected/errored — proceed; chainId pin guards the tx */ }
+}
+
+// Wait for a tx receipt via the READ rpc (fast/direct) instead of the wallet
+// provider — ethers' tx.wait() over WalletConnect frequently hangs. Returns
+// the receipt, or null after the timeout (tx may still confirm; we just stop
+// blocking the UI on it).
+export async function waitForTx(txHash: string, timeoutMs = 60000): Promise<any> {
+  const rp = getReadProvider();
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const rec = await rp.getTransactionReceipt(txHash);
+      if (rec) return rec;
+    } catch { /* keep polling */ }
+    await new Promise((r) => setTimeout(r, 2500));
+  }
+  return null;
 }
 
 export async function getRecipeBookWrite(): Promise<ethers.Contract> {
@@ -370,6 +401,6 @@ export async function payForAI(): Promise<{ txHash: string; payer: string }> {
     gasPrice,
     chainId: CHAIN.id, // pin to LCAI so the wallet can't send this on Ethereum
   });
-  await tx.wait(1);
+  await waitForTx(tx.hash);
   return { txHash: tx.hash, payer };
 }

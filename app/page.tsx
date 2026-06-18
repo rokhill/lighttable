@@ -19,6 +19,7 @@ import {
   connectWalletConnect,
   disconnectWallet,
   buildTxOverrides,
+  waitForTx,
   payForAI,
   AI_FEE_LCAI,
 } from "@/lib/contracts";
@@ -258,7 +259,7 @@ export default function Home() {
       });
       const tx = await c.submitRecipe(hash, ov);
       showToast("Publishing to LCAI — this takes a few seconds…", "info");
-      await tx.wait(1);
+      await waitForTx(tx.hash);
       setFTitle(""); setFIngRows([{ amount: "", item: "" }]); setFSteps(""); setFTag(""); setFCat("Dinner");
       setTab("browse"); showToast("Recipe published. Hash anchored on-chain.", "ok");
       await loadAll();
@@ -285,7 +286,7 @@ export default function Home() {
       });
       const tx = await c.tip(tipFor.id, { value: val, ...ov });
       showToast("Sending tip — a few seconds…", "info");
-      await tx.wait(1);
+      await waitForTx(tx.hash);
       setTipFor(null);
       showToast(`Tipped ${amt} LCAI — 95% to the cook, 5% platform.`, "ok");
       await loadAll();
@@ -304,7 +305,7 @@ export default function Home() {
         from: wallet!,
         data: c.interface.encodeFunctionData("upvote", [r.id]),
       });
-      const tx = await c.upvote(r.id, ov); await tx.wait(1);
+      const tx = await c.upvote(r.id, ov); await waitForTx(tx.hash);
       showToast("Upvoted — recorded on-chain.", "ok"); await loadAll();
     } catch (e: any) {
       const m = e?.reason || e?.message || "";
