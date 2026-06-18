@@ -67,6 +67,8 @@ export default function Home() {
   const [aiQ, setAiQ] = useState("");
   const [aiOut, setAiOut] = useState<string | null>(null);
   const [aiBusy, setAiBusy] = useState(false);
+  const [aiEngine, setAiEngine] = useState<string | null>(null);
+  const [aiRecipe, setAiRecipe] = useState<{ title: string; ingredients: string; steps: string } | null>(null);
 
   const isOwner = wallet?.toLowerCase() === OWNER;
 
@@ -317,12 +319,37 @@ export default function Home() {
   };
 
   const askKitchen = async () => {
-    if (!aiQ.trim()) return showToast("Tell the kitchen what to change.", "info");
-    setAiBusy(true); setAiOut(null);
-    setTimeout(() => {
-      setAiOut("The LCAI inference feature is coming next — it will run a real on-chain job and return a private, browser-decrypted suggestion.");
+    if (!aiQ.trim()) return showToast("Tell the kitchen what you'd like.", "info");
+    setAiBusy(true); setAiOut(null); setAiEngine(null);
+    try {
+      const res = await fetch("/api/kitchen", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: aiRecipe ? "adapt" : "ask",
+          recipe: aiRecipe || null,
+          request: aiQ.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "The kitchen is closed right now.");
+      setAiOut(data.result || "(no answer came back)");
+      setAiEngine(data.engine || null);
+    } catch (e: any) {
+      setAiOut(null);
+      showToast(e?.message || "The kitchen is closed right now.", "err");
+    } finally {
       setAiBusy(false);
-    }, 600);
+    }
+  };
+
+  // Load a recipe into Ask the Kitchen for substitutions/adaptation.
+  const adaptRecipe = (r: Recipe) => {
+    setAiRecipe({ title: r.title, ingredients: r.ingredients, steps: r.steps });
+    setAiQ("");
+    setAiOut(null);
+    setAiEngine(null);
+    setTab("ai");
   };
 
   // ---- derived views ----
@@ -387,6 +414,7 @@ export default function Home() {
           </div>
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
             <button onClick={() => upvote(r)} disabled={busy} style={{ background: "transparent", border: "1px solid var(--border-hover)", color: C2, padding: "5px 9px", borderRadius: 8, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-arrow-up" style={{ fontSize: 13, verticalAlign: -1 }} aria-hidden /> {r.upvotes}</button>
+            <button onClick={() => adaptRecipe(r)} title="Adapt this recipe in Ask the Kitchen" style={{ background: "transparent", border: "1px solid var(--ai-border)", color: "var(--brand-2)", padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-sparkles" style={{ fontSize: 12, verticalAlign: -1 }} aria-hidden /> Adapt</button>
             <button onClick={() => { setTipFor(r); setTipAmt("5"); }} style={{ background: "var(--tip-btn)", border: "none", color: "var(--tip-btn-text)", padding: "5px 12px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}>Tip</button>
             {isOwner && <button onClick={() => toggleHide(r)} disabled={busy} title={isHidden ? "Restore" : "Hide"} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C3, padding: "5px 8px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}><i className={isHidden ? "ti ti-eye" : "ti ti-eye-off"} aria-hidden /></button>}
           </div>
@@ -429,7 +457,7 @@ export default function Home() {
   };
 
   const tabs: [Tab, string][] = [
-    ["browse", "Browse"], ["leaderboard", "Leaderboard"], ["kitchen", "My Kitchen"], ["submit", "Add"], ["ai", "Ask AI"],
+    ["browse", "Browse"], ["leaderboard", "Leaderboard"], ["kitchen", "My Kitchen"], ["submit", "Add"], ["ai", "Ask the Kitchen"],
   ];
 
   return (
@@ -551,7 +579,15 @@ export default function Home() {
           )}
 
           {/* SUBMIT */}
-          {tab === "submit" && (
+          {tab === "submit" && !wallet && (
+            <div style={{ textAlign: "center", padding: "48px 20px", border: "1px dashed var(--border-2)", borderRadius: 12, marginTop: 8 }}>
+              <p className="serif" style={{ fontSize: 18, color: C, margin: "0 0 6px" }}>Connect to add a recipe</p>
+              <p style={{ fontSize: 13, color: C2, margin: "0 0 16px" }}>Publishing anchors your recipe on-chain, so you'll need your wallet connected first.</p>
+              <button onClick={connect} style={{ background: "var(--grad)", color: "#fff", border: "none", padding: "9px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Connect wallet</button>
+            </div>
+          )}
+
+          {tab === "submit" && wallet && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 8 }}>
               <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 13, padding: 19 }}>
                 <div style={{ marginBottom: 15 }}>
@@ -659,14 +695,30 @@ export default function Home() {
               <div style={{ background: "var(--ai-panel)", border: "1px solid var(--ai-border)", borderRadius: 13, padding: 19 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 13 }}>
                   <i className="ti ti-sparkles" style={{ fontSize: 19, color: "var(--brand-2)" }} aria-hidden />
-                  <span style={{ fontSize: 14, fontWeight: 500, color: C }}>LCAI kitchen assistant</span>
-                  <span style={{ fontSize: 10, color: "var(--chip-text)", background: "var(--chip-bg)", padding: "3px 8px", borderRadius: 20, letterSpacing: 0.3 }}>COMING SOON</span>
+                  <span style={{ fontSize: 14, fontWeight: 500, color: C }}>Ask the Kitchen</span>
+                  <span style={{ fontSize: 10, color: "var(--chip-text)", background: "var(--chip-bg)", padding: "3px 8px", borderRadius: 20, letterSpacing: 0.3 }}>LCAI</span>
                 </div>
-                <input value={aiQ} onChange={(e) => setAiQ(e.target.value)} placeholder="Make the banana bread vegan and halve it" style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--ai-border)", borderRadius: 8, padding: "11px 13px", fontSize: 14, color: C, marginBottom: 13 }} />
-                <button onClick={askKitchen} disabled={aiBusy} style={{ background: "var(--grad)", color: "#fff", border: "none", padding: "10px 20px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>{aiBusy ? "Running…" : "Ask the kitchen ↗"}</button>
-                {aiOut && <div style={{ marginTop: 15, fontSize: 13, lineHeight: 1.6, color: C2, borderLeft: "2px solid var(--ai-rule)", paddingLeft: 13 }}>{aiOut}</div>}
+
+                {aiRecipe && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "var(--bg-input)", border: "1px solid var(--ai-border)", borderRadius: 8, padding: "8px 11px", marginBottom: 11 }}>
+                    <span style={{ fontSize: 12, color: C2 }}>Adapting: <strong style={{ color: C }}>{aiRecipe.title}</strong></span>
+                    <button onClick={() => setAiRecipe(null)} style={{ background: "transparent", border: "none", color: C3, fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>clear</button>
+                  </div>
+                )}
+
+                <input value={aiQ} onChange={(e) => setAiQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !aiBusy) askKitchen(); }} placeholder={aiRecipe ? "I don't have buttermilk — what can I use instead?" : "How do I keep pasta from sticking?"} style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--ai-border)", borderRadius: 8, padding: "11px 13px", fontSize: 14, color: C, marginBottom: 13 }} />
+                <button onClick={askKitchen} disabled={aiBusy} style={{ background: "var(--grad)", color: "#fff", border: "none", padding: "10px 20px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: aiBusy ? "wait" : "pointer", opacity: aiBusy ? 0.8 : 1 }}>{aiBusy ? "The kitchen is cooking…" : "Ask the kitchen ↗"}</button>
+
+                {aiBusy && <p style={{ fontSize: 11, color: C3, margin: "12px 2px 0", lineHeight: 1.55 }}>Running a live inference job on LCAI workers — this can take up to a minute.</p>}
+
+                {aiOut && (
+                  <div style={{ marginTop: 15 }}>
+                    {aiEngine && <div style={{ fontSize: 10, color: "var(--chip-text)", marginBottom: 6, letterSpacing: 0.3 }}>{aiEngine === "lcai" ? "↳ answered by native LCAI inference" : "↳ answered by fallback engine"}</div>}
+                    <div style={{ fontSize: 13, lineHeight: 1.6, color: C2, borderLeft: "2px solid var(--ai-rule)", paddingLeft: 13, whiteSpace: "pre-wrap" }}>{aiOut}</div>
+                  </div>
+                )}
               </div>
-              <p style={{ fontSize: 11, color: C3, margin: "11px 2px 0", lineHeight: 1.55 }}>Coming next: each suggestion runs as a real inference job on LCAI workers (~0.02 LCAI), encrypted in your browser.</p>
+              <p style={{ fontSize: 11, color: C3, margin: "11px 2px 0", lineHeight: 1.55 }}>Each answer runs as a real inference job on LCAI workers — on-chain AI, not a wrapper around someone else's API.</p>
             </div>
           )}
         </div>

@@ -89,6 +89,18 @@ export async function connectWalletConnect(): Promise<void> {
   // Dynamic import keeps this large dependency out of the initial bundle and
   // off the server — it only loads when a user actually picks WalletConnect.
   const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
+
+  // CRITICAL: WalletConnect uses metadata.url to deep-link the user back to the
+  // dApp after they approve in their wallet. If it's hardcoded to the prod URL
+  // but the user is on a different origin (preview deploy, LAN IP for testing,
+  // www vs non-www), the redirect targets the wrong place and the wallet hangs
+  // on "please wait while being redirected". Using the ACTUAL current origin
+  // makes the round-trip return to wherever the user really is.
+  const origin =
+    typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "https://lighttable.vercel.app";
+
   const wc = await EthereumProvider.init({
     projectId: WC_PROJECT_ID,
     // optionalChains (not required `chains`) lets the session establish even
@@ -102,8 +114,10 @@ export async function connectWalletConnect(): Promise<void> {
     metadata: {
       name: "LightTable",
       description: "A community cookbook on LCAI.",
-      url: "https://lighttable.vercel.app",
-      icons: ["https://lighttable.vercel.app/icon.png"],
+      url: origin,
+      icons: [`${origin}/icon.png`],
+      // redirect hints help the wallet bounce back to the dApp after approval.
+      redirect: { native: "", universal: origin },
     },
   });
   await wc.connect(); // opens the QR / deep-link modal
