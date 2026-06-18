@@ -68,6 +68,7 @@ export default function Home() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [nameModal, setNameModal] = useState(false);
   const [ownerPanel, setOwnerPanel] = useState<string | null>(null); // address being edited
+  const [badgeInfo, setBadgeInfo] = useState<{ emoji: string; name: string; desc: string } | null>(null);
   const [nameInput, setNameInput] = useState("");
   const [walletModal, setWalletModal] = useState(false);
 
@@ -517,14 +518,14 @@ export default function Home() {
       <span style={{ fontSize: 10, fontWeight: 600, color: ts.color, border: `1px solid ${ts.color}55`, background: `${ts.color}18`, padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap", textShadow: ts.glow ? `0 0 8px ${ts.color}99` : "none" }}>{rank.name}</span>
     );
   };
-  // Row of earned badge emojis (with tooltips).
+  // Row of earned badge emojis — tap any to see what it is and how to earn it.
   const BadgeRow = ({ address, max = 6 }: { address: string; max?: number }) => {
     const { badges } = rankBadgesFor(address);
     if (!badges.length) return null;
     return (
       <span style={{ display: "inline-flex", gap: 3, alignItems: "center" }}>
         {badges.slice(0, max).map((b) => (
-          <span key={b.id} title={`${b.name} — ${b.desc}`} style={{ fontSize: 12, cursor: "default" }}>{b.emoji}</span>
+          <span key={b.id} role="button" title={`${b.name} — ${b.desc}`} onClick={(e) => { e.stopPropagation(); setBadgeInfo({ emoji: b.emoji, name: b.name, desc: b.desc }); }} style={{ fontSize: 12, cursor: "pointer" }}>{b.emoji}</span>
         ))}
       </span>
     );
@@ -780,7 +781,7 @@ export default function Home() {
                       <div style={{ background: "var(--bg-raised)", border: `1px solid ${ts.color}55`, borderRadius: 13, padding: "16px 18px", marginBottom: 16 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 18, fontWeight: 700, color: ts.color, textShadow: ts.glow ? `0 0 12px ${ts.color}99` : "none" }}>{rank.name}</span>
-                          {badges.length > 0 && <span style={{ display: "inline-flex", gap: 4 }}>{badges.map((b: any) => <span key={b.id} title={`${b.name} — ${b.desc}`} style={{ fontSize: 15 }}>{b.emoji}</span>)}</span>}
+                          {badges.length > 0 && <span style={{ display: "inline-flex", gap: 4 }}>{badges.map((b: any) => <span key={b.id} role="button" title={`${b.name} — ${b.desc}`} onClick={() => setBadgeInfo({ emoji: b.emoji, name: b.name, desc: b.desc })} style={{ fontSize: 15, cursor: "pointer" }}>{b.emoji}</span>)}</span>}
                         </div>
                         {nr ? (
                           <>
@@ -1065,6 +1066,18 @@ export default function Home() {
                 <button onClick={saveName} disabled={busy} style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: busy ? "wait" : "pointer" }}>{busy ? "Saving…" : "Sign & save"}</button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {badgeInfo && (
+        <div onClick={() => setBadgeInfo(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 55 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 14, padding: "24px 22px", maxWidth: 320, width: "100%", textAlign: "center" }}>
+            <div style={{ fontSize: 44, marginBottom: 8 }}>{badgeInfo.emoji}</div>
+            <p className="serif" style={{ fontSize: 19, color: C, margin: "0 0 6px" }}>{badgeInfo.name}</p>
+            <p style={{ fontSize: 11, color: C3, textTransform: "uppercase", letterSpacing: 0.8, margin: "0 0 8px" }}>How to earn it</p>
+            <p style={{ fontSize: 14, color: C2, margin: "0 0 18px", lineHeight: 1.5 }}>{badgeInfo.desc}</p>
+            <button onClick={() => setBadgeInfo(null)} style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "8px 20px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Got it</button>
           </div>
         </div>
       )}

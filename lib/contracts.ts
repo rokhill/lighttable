@@ -326,8 +326,24 @@ export async function buildTxOverrides(
 // on-chain before running inference. One signature, pre-computed gas so the
 // wallet only prompts once (same trick as the contract writes).
 export async function payForAI(): Promise<{ txHash: string; payer: string }> {
+  // CRITICAL: ensure the wallet is actually on LCAI before sending, or a mobile
+  // wallet sitting on Ethereum will send the payment on the WRONG network.
+  await switchToLCAI();
+
   const signer = await getSigner();
   const payer = await signer.getAddress();
+
+  // Double-check the chain after switching; bail clearly if it didn't take.
+  try {
+    const net = await signer.provider.getNetwork();
+    if (Number(net.chainId) !== CHAIN.id) {
+      throw new Error("Your wallet isn't on the Lightchain network. Switch to Lightchain (chain 9200) and try again.");
+    }
+  } catch (e: any) {
+    if (e?.message?.includes("Lightchain network")) throw e;
+    // if the check itself failed, continue — the explicit chainId below still guards
+  }
+
   const value = ethers.parseEther(AI_FEE_LCAI);
   const rp = getReadProvider();
   let gasPrice: bigint;
@@ -342,6 +358,7 @@ export async function payForAI(): Promise<{ txHash: string; payer: string }> {
     value,
     gasLimit: 30000n,
     gasPrice,
+    chainId: CHAIN.id, // pin to LCAI so the wallet can't send this on Ethereum
   });
   await tx.wait(1);
   return { txHash: tx.hash, payer };
