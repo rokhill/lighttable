@@ -538,12 +538,12 @@ export default function Home() {
     const isHidden = hidden.includes(r.id);
     return (
       <article key={r.id} style={{ background: "var(--bg-raised)", border: `1px solid ${open ? "var(--border-hover)" : "var(--border)"}`, borderRadius: 12, overflow: "hidden", opacity: isHidden ? 0.55 : 1 }}>
-        <div onClick={() => setExpanded(open ? null : r.id)} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 14, padding: "14px 16px", cursor: "pointer" }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <i className={open ? "ti ti-chevron-down" : "ti ti-chevron-right"} style={{ fontSize: 15, color: C3, flexShrink: 0 }} aria-hidden />
-              <p className="serif" style={{ fontSize: 17, margin: 0, color: C, lineHeight: 1.3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{r.title}</p>
-              {r.hashVerified && <span title="Off-chain text matches the on-chain hash" style={{ color: "var(--ok)", fontSize: 13, flexShrink: 0 }}><i className="ti ti-rosette-discount-check" aria-hidden /></span>}
+        <div onClick={() => setExpanded(open ? null : r.id)} style={{ display: "flex", flexDirection: "column", gap: 10, padding: "14px 16px", cursor: "pointer" }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <i className={open ? "ti ti-chevron-down" : "ti ti-chevron-right"} style={{ fontSize: 15, color: C3, flexShrink: 0, marginTop: 3 }} aria-hidden />
+              <p className="serif" style={{ fontSize: 17, margin: 0, color: C, lineHeight: 1.3, flex: 1, minWidth: 0, wordBreak: "break-word" }}>{r.title}</p>
+              {r.hashVerified && <span title="Off-chain text matches the on-chain hash" style={{ color: "var(--ok)", fontSize: 13, flexShrink: 0, marginTop: 3 }}><i className="ti ti-rosette-discount-check" aria-hidden /></span>}
               {isHidden && <span style={{ fontSize: 10, color: "#c98", border: "1px solid #c98", borderRadius: 12, padding: "1px 7px", flexShrink: 0 }}>hidden</span>}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginLeft: 23, flexWrap: "wrap" }}>
@@ -554,12 +554,15 @@ export default function Home() {
               {r.tipsTotal > 0 && <span style={{ fontSize: 11, color: "var(--tip)", fontWeight: 500 }}>· {r.tipsTotal.toFixed(2)} LCAI</span>}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginLeft: 23 }} onClick={(e) => e.stopPropagation()}>
             <button onClick={() => upvote(r)} disabled={busy} style={{ background: "transparent", border: "1px solid var(--border-hover)", color: C2, padding: "5px 9px", borderRadius: 8, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-arrow-up" style={{ fontSize: 13, verticalAlign: -1 }} aria-hidden /> {r.upvotes}</button>
             <button onClick={() => adaptRecipe(r)} title="Adapt this recipe in Ask the Kitchen" style={{ background: "transparent", border: "1px solid var(--ai-border)", color: "var(--brand-2)", padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-sparkles" style={{ fontSize: 12, verticalAlign: -1 }} aria-hidden /> Adapt</button>
             <button onClick={() => { setTipFor(r); setTipAmt("5"); }} style={{ background: "var(--tip-btn)", border: "none", color: "var(--tip-btn-text)", padding: "5px 12px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}>Tip</button>
             {isOwner && <button onClick={() => toggleHide(r)} disabled={busy} title={isHidden ? "Restore" : "Hide"} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C3, padding: "5px 8px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}><i className={isHidden ? "ti ti-eye" : "ti ti-eye-off"} aria-hidden /></button>}
           </div>
+        </div>
+        <div style={{ display: "none" }} onClick={(e) => e.stopPropagation()}>
+          {/* legacy actions container removed — buttons moved into the stacked header above */}
         </div>
         {open && (
           <div style={{ padding: "4px 18px 18px 39px", borderTop: "1px solid var(--border)" }}>
