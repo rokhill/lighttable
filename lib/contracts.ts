@@ -91,7 +91,12 @@ export async function connectWalletConnect(): Promise<void> {
   const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
   const wc = await EthereumProvider.init({
     projectId: WC_PROJECT_ID,
-    chains: [CHAIN.id],
+    // optionalChains (not required `chains`) lets the session establish even
+    // when the wallet doesn't have chain 9200 yet. With it in REQUIRED chains,
+    // Trust Wallet refuses the whole connection ("network not supported") before
+    // we ever get a chance to add the chain. As optional, we connect first,
+    // then switchToLCAI() adds/switches.
+    optionalChains: [CHAIN.id],
     showQrModal: true,
     rpcMap: { [CHAIN.id]: CHAIN.rpc },
     metadata: {
@@ -157,28 +162,73 @@ export async function getRecipeBookWrite(): Promise<ethers.Contract> {
 export async function switchToLCAI(): Promise<void> {
   const eip = activeEip1193 || (hasInjected() ? window.ethereum : null);
   if (!eip) throw new Error("No wallet connected.");
+
+  const addParams = {
+    chainId: CHAIN.idHex,
+    chainName: CHAIN.name,
+    nativeCurrency: { name: CHAIN.symbol, symbol: CHAIN.symbol, decimals: CHAIN.decimals },
+    rpcUrls: [CHAIN.rpc],
+    blockExplorerUrls: [CHAIN.explorer],
+  };
+
+  // First: are we already on LCAI? If so, nothing to do. (Trust Wallet/WC can
+  // throw on switch even when already correct, so short-circuit here.)
+  try {
+    const current = await eip.request({ method: "eth_chainId" });
+    if (typeof current === "string" && current.toLowerCase() === CHAIN.idHex.toLowerCase()) {
+      return;
+    }
+  } catch { /* some providers don't answer eth_chainId pre-switch; continue */ }
+
+  // Try a plain switch first (works when the chain is already known to the wallet).
   try {
     await eip.request({
       method: "wallet_switchEthereumChain",
       params: [{ chainId: CHAIN.idHex }],
     });
-  } catch (err: any) {
-    // 4902 = chain not added to the wallet yet
-    if (err.code === 4902) {
+    return;
+  } catch (switchErr: any) {
+    // The old code only added on code 4902. But MetaMask uses 4902, while
+    // Trust Wallet / WalletConnect / Coinbase often return a DIFFERENT code
+    // (or none) when the chain is unknown — so the add never fired and users
+    // saw "network not supported". Now we treat ANY switch failure as a reason
+    // to attempt adding the chain, then switch again.
+    const code = switchErr?.code;
+    // 4001 = user explicitly rejected — respect that, don't loop.
+    if (code === 4001) throw switchErr;
+
+    try {
       await eip.request({
         method: "wallet_addEthereumChain",
-        params: [
-          {
-            chainId: CHAIN.idHex,
-            chainName: CHAIN.name,
-            nativeCurrency: { name: CHAIN.symbol, symbol: CHAIN.symbol, decimals: CHAIN.decimals },
-            rpcUrls: [CHAIN.rpc],
-            blockExplorerUrls: [CHAIN.explorer],
-          },
-        ],
+        params: [addParams],
       });
-    } else {
-      throw err;
+    } catch (addErr: any) {
+      if (addErr?.code === 4001) throw addErr; // user declined the add
+      // Some wallets ADD successfully but still throw a vague/"unknown" error
+      // on the response. Don't bail yet — fall through and try the switch; if
+      // the chain actually got added, the switch below succeeds.
+    }
+
+    // After adding, switch to it. Some wallets auto-switch on add (this no-ops),
+    // others need this explicit follow-up.
+    try {
+      await eip.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: CHAIN.idHex }],
+      });
+    } catch (finalErr: any) {
+      if (finalErr?.code === 4001) throw finalErr;
+      // Last resort: verify by reading the chain. If we're on LCAI now, the
+      // vague errors were noise and we're fine. If not, surface a clear message.
+      try {
+        const now = await eip.request({ method: "eth_chainId" });
+        if (typeof now === "string" && now.toLowerCase() === CHAIN.idHex.toLowerCase()) {
+          return;
+        }
+      } catch { /* fall through */ }
+      throw new Error(
+        "Couldn't switch to the Lightchain network automatically. Open your wallet, switch to “Lightchain AI” (chain 9200), then reconnect."
+      );
     }
   }
 }
