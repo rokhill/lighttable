@@ -1,10 +1,19 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "LightTable — share your table",
   description:
     "A community cookbook on LCAI. Share recipes, tip the cooks you love, and let on-chain AI adapt anything to your kitchen.",
+};
+
+// Without this, mobile browsers render the page at ~980px desktop width and
+// zoom out — making portrait unusable until you rotate. This makes the layout
+// render at the real device width so portrait works properly.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 // Set the theme class before paint to avoid a flash. Respects a saved choice,
