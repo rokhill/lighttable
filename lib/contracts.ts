@@ -90,29 +90,14 @@ export async function connectInjected(): Promise<void> {
 }
 
 /** Connect via WalletConnect (mobile wallets, QR / deep-link). Sets it active. */
-export async function connectWalletConnect(): Promise<void> {
-  // Dynamic import keeps this large dependency out of the initial bundle and
-  // off the server — it only loads when a user actually picks WalletConnect.
+async function initWalletConnect(): Promise<any> {
   const { EthereumProvider } = await import("@walletconnect/ethereum-provider");
-
-  // CRITICAL: WalletConnect uses metadata.url to deep-link the user back to the
-  // dApp after they approve in their wallet. If it's hardcoded to the prod URL
-  // but the user is on a different origin (preview deploy, LAN IP for testing,
-  // www vs non-www), the redirect targets the wrong place and the wallet hangs
-  // on "please wait while being redirected". Using the ACTUAL current origin
-  // makes the round-trip return to wherever the user really is.
   const origin =
     typeof window !== "undefined" && window.location?.origin
       ? window.location.origin
       : "https://lighttable.vercel.app";
-
-  const wc = await EthereumProvider.init({
+  return EthereumProvider.init({
     projectId: WC_PROJECT_ID,
-    // optionalChains (not required `chains`) lets the session establish even
-    // when the wallet doesn't have chain 9200 yet. With it in REQUIRED chains,
-    // Trust Wallet refuses the whole connection ("network not supported") before
-    // we ever get a chance to add the chain. As optional, we connect first,
-    // then switchToLCAI() adds/switches.
     optionalChains: [CHAIN.id],
     showQrModal: true,
     rpcMap: { [CHAIN.id]: CHAIN.rpc },
@@ -121,12 +106,32 @@ export async function connectWalletConnect(): Promise<void> {
       description: "A community cookbook on LCAI.",
       url: origin,
       icons: [`${origin}/icon.png`],
-      // redirect hints help the wallet bounce back to the dApp after approval.
       redirect: { native: "", universal: origin },
     },
   });
+}
+
+export async function connectWalletConnect(): Promise<void> {
+  const wc = await initWalletConnect();
   await wc.connect(); // opens the QR / deep-link modal
   activeEip1193 = wc;
+}
+
+// Restore a previously-approved WalletConnect session on page load, WITHOUT
+// popping the QR modal. WalletConnect persists the session in localStorage, so
+// if the user connected before and didn't disconnect, this re-attaches to it —
+// no need to scan/approve again every visit. Returns the connected address, or
+// null if there's no live session to restore.
+export async function restoreWalletConnect(): Promise<string | null> {
+  try {
+    const wc = await initWalletConnect();
+    // EthereumProvider.init rehydrates an existing session if one is stored.
+    if (wc.session && wc.accounts && wc.accounts.length > 0) {
+      activeEip1193 = wc;
+      return wc.accounts[0];
+    }
+  } catch { /* no session / restore failed — user will connect manually */ }
+  return null;
 }
 
 /** The currently-active EIP-1193 provider, or null if not connected. */
@@ -169,7 +174,25 @@ export function getRecipeBookRead(): ethers.Contract {
 }
 
 /** Write contract instance bound to the connected signer (submit/tip/upvote). */
+// Make sure the wallet is on LCAI before any write. Skips if already on LCAI;
+// never blocks forever (mobile WalletConnect can hang the switch), and the
+// callers pin chainId on the tx as a backstop.
+export async function ensureLCAI(): Promise<void> {
+  try {
+    const signer = await getSigner();
+    const net = await signer.provider.getNetwork();
+    if (Number(net.chainId) === CHAIN.id) return; // already on LCAI
+  } catch { /* can't read — attempt switch */ }
+  try {
+    await Promise.race([
+      switchToLCAI(),
+      new Promise((resolve) => setTimeout(resolve, 8000)),
+    ]);
+  } catch { /* rejected/errored — proceed; chainId pin guards the tx */ }
+}
+
 export async function getRecipeBookWrite(): Promise<ethers.Contract> {
+  await ensureLCAI();
   const signer = await getSigner();
   return new ethers.Contract(CONTRACTS.recipeBook, RECIPE_BOOK_ABI, signer);
 }
@@ -295,7 +318,7 @@ export function explorerAddr(addr: string): string {
 // ---------------------------------------------------------------------------
 export async function buildTxOverrides(
   data: { to: string; from: string; data?: string; value?: bigint }
-): Promise<{ gasLimit: bigint; gasPrice: bigint }> {
+): Promise<{ gasLimit: bigint; gasPrice: bigint; chainId: number }> {
   const rp = getReadProvider();
   let gasLimit: bigint;
   try {
@@ -318,7 +341,8 @@ export async function buildTxOverrides(
   } catch {
     gasPrice = ethers.parseUnits("1", "gwei");
   }
-  return { gasLimit, gasPrice };
+  // Pin to LCAI so a mobile wallet on the wrong network can't send on ETH.
+  return { gasLimit, gasPrice, chainId: CHAIN.id };
 }
 
 // Pay the Ask-the-Kitchen fee: a plain LCAI transfer to the treasury.
@@ -326,23 +350,9 @@ export async function buildTxOverrides(
 // on-chain before running inference. One signature, pre-computed gas so the
 // wallet only prompts once (same trick as the contract writes).
 export async function payForAI(): Promise<{ txHash: string; payer: string }> {
-  // CRITICAL: ensure the wallet is actually on LCAI before sending, or a mobile
-  // wallet sitting on Ethereum will send the payment on the WRONG network.
-  await switchToLCAI();
-
+  await ensureLCAI();
   const signer = await getSigner();
   const payer = await signer.getAddress();
-
-  // Double-check the chain after switching; bail clearly if it didn't take.
-  try {
-    const net = await signer.provider.getNetwork();
-    if (Number(net.chainId) !== CHAIN.id) {
-      throw new Error("Your wallet isn't on the Lightchain network. Switch to Lightchain (chain 9200) and try again.");
-    }
-  } catch (e: any) {
-    if (e?.message?.includes("Lightchain network")) throw e;
-    // if the check itself failed, continue — the explicit chainId below still guards
-  }
 
   const value = ethers.parseEther(AI_FEE_LCAI);
   const rp = getReadProvider();

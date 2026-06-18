@@ -15,6 +15,7 @@ import {
   shortAddr,
   hasInjected,
   connectInjected,
+  restoreWalletConnect,
   connectWalletConnect,
   disconnectWallet,
   buildTxOverrides,
@@ -78,7 +79,7 @@ export default function Home() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiEngine, setAiEngine] = useState<string | null>(null);
   const [aiRecipe, setAiRecipe] = useState<{ title: string; ingredients: string; steps: string } | null>(null);
-  const [aiStage, setAiStage] = useState<"pay" | "cook" | null>(null);
+  const [aiStage, setAiStage] = useState<"pay" | "starting" | "cook" | null>(null);
 
   const isOwner = wallet?.toLowerCase() === OWNER;
 
@@ -166,6 +167,23 @@ export default function Home() {
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Silently restore a prior WalletConnect session on load — so a returning
+  // mobile user doesn't have to scan/approve every single visit.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (hasInjected()) return; // injected wallets reconnect on their own
+        const addr = await restoreWalletConnect();
+        if (!addr || cancelled) return;
+        const bal = await getReadProvider().getBalance(addr);
+        if (cancelled) return;
+        setWallet(addr); setBalance(formatLCAI(bal));
+      } catch { /* no session to restore */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // ---- wallet ----
   // Open the chooser. On desktop with an injected wallet we *could* auto-connect,
@@ -362,7 +380,7 @@ export default function Home() {
       const { txHash, payer } = await payForAI();
 
       // 2) Start the job (fast — returns a jobId immediately).
-      setAiStage("cook");
+      setAiStage("starting");
       const startRes = await fetch("/api/kitchen?action=start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -379,6 +397,7 @@ export default function Home() {
 
       // 3) Poll for the result (each poll is quick — sidesteps the 60s limit).
       const jobId = startData.jobId;
+      setAiStage("cook");
       const deadline = Date.now() + 150000; // up to 2.5 min
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 3000));
@@ -952,8 +971,10 @@ export default function Home() {
                 )}
 
                 <input value={aiQ} onChange={(e) => setAiQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !aiBusy) askKitchen(); }} placeholder={aiRecipe ? "I don't have buttermilk — what can I use instead?" : "How do I keep pasta from sticking?"} style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--ai-border)", borderRadius: 8, padding: "11px 13px", fontSize: 14, color: C, marginBottom: 13 }} />
-                <button onClick={askKitchen} disabled={aiBusy} style={{ background: "var(--grad)", color: "#fff", border: "none", padding: "10px 20px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: aiBusy ? "wait" : "pointer", opacity: aiBusy ? 0.8 : 1 }}>{aiBusy ? (aiStage === "pay" ? "Confirm payment in wallet…" : "The kitchen is cooking…") : `Ask the kitchen · ${AI_FEE_LCAI} LCAI ↗`}</button>
+                <button onClick={askKitchen} disabled={aiBusy} style={{ background: "var(--grad)", color: "#fff", border: "none", padding: "10px 20px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: aiBusy ? "wait" : "pointer", opacity: aiBusy ? 0.8 : 1 }}>{aiBusy ? (aiStage === "pay" ? "Confirm payment in wallet…" : aiStage === "starting" ? "Payment received — firing up…" : "The kitchen is cooking…") : `Ask the kitchen · ${AI_FEE_LCAI} LCAI ↗`}</button>
 
+                {aiBusy && aiStage === "pay" && <p style={{ fontSize: 11, color: C3, margin: "12px 2px 0", lineHeight: 1.55 }}>Open your wallet app to approve the {AI_FEE_LCAI} LCAI payment, then come back here.</p>}
+                {aiBusy && aiStage === "starting" && <p style={{ fontSize: 11, color: C3, margin: "12px 2px 0", lineHeight: 1.55 }}>Payment confirmed — sending your request to the LCAI workers…</p>}
                 {aiBusy && aiStage === "cook" && <p style={{ fontSize: 11, color: C3, margin: "12px 2px 0", lineHeight: 1.55 }}>Running a live inference job on LCAI workers — this can take up to a minute.</p>}
                 {!aiBusy && <p style={{ fontSize: 11, color: C3, margin: "10px 2px 0", lineHeight: 1.55 }}>Each request runs a real LCAI inference job. A small {AI_FEE_LCAI} LCAI fee covers it.</p>}
 
