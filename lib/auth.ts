@@ -22,6 +22,10 @@ export function moderationMessage(action: string, id: number, ts: number): strin
   return `LightTable: ${action} recipe\nId: ${id}\nTime: ${ts}`;
 }
 
+export function rankOverrideMessage(address: string, ts: number): string {
+  return `LightTable: set rank/badge override\nFor: ${address}\nTime: ${ts}`;
+}
+
 /** Returns the recovered signer address (lowercase) if the signature is valid
  *  and fresh, else null. */
 export function recoverFresh(message: string, signature: string, ts: number): string | null {

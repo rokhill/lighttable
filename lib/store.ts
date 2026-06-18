@@ -111,3 +111,42 @@ export async function getHiddenIds(): Promise<number[]> {
   const members = await redis().smembers(HIDDEN_KEY);
   return (members || []).map((m) => Number(m)).filter((n) => !Number.isNaN(n));
 }
+
+// ---------------------------------------------------------------------------
+// Owner overrides for ranks & badges. Stored off-chain (like the hide-list),
+// owner-signature-gated. Lets the owner: bump someone's rank manually, grant a
+// badge by hand, or revoke a badge (e.g. if someone gamed the system).
+//
+//   OVERRIDES_KEY (hash): address -> JSON { rankLevel?: number,
+//                                           grant?: string[],   // badge ids forced on
+//                                           revoke?: string[] } // badge ids forced off
+// ---------------------------------------------------------------------------
+
+const OVERRIDES_KEY = "rank_overrides";
+
+export interface RankOverride {
+  rankLevel?: number;   // force a specific rank level (owner-set)
+  grant?: string[];     // badge ids to force-grant
+  revoke?: string[];    // badge ids to force-remove
+}
+
+export async function getAllOverrides(): Promise<Record<string, RankOverride>> {
+  const all = await redis().hgetall<Record<string, string>>(OVERRIDES_KEY);
+  if (!all) return {};
+  const out: Record<string, RankOverride> = {};
+  for (const [addr, raw] of Object.entries(all)) {
+    try { out[addr.toLowerCase()] = typeof raw === "string" ? JSON.parse(raw) : (raw as any); } catch {}
+  }
+  return out;
+}
+
+export async function setOverride(address: string, ov: RankOverride): Promise<void> {
+  const addr = address.toLowerCase();
+  // empty override => delete the entry
+  const empty = (ov.rankLevel == null) && !(ov.grant && ov.grant.length) && !(ov.revoke && ov.revoke.length);
+  if (empty) {
+    await redis().hdel(OVERRIDES_KEY, addr);
+    return;
+  }
+  await redis().hset(OVERRIDES_KEY, { [addr]: JSON.stringify(ov) });
+}

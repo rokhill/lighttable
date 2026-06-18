@@ -22,7 +22,8 @@ import {
   AI_FEE_LCAI,
 } from "@/lib/contracts";
 import { hashContent, verifyContent, type Recipe, type RecipeContent } from "@/lib/recipes";
-import { profileMessage, moderationMessage, nameFor } from "@/lib/profileNames";
+import { profileMessage, moderationMessage, nameFor, rankOverrideMessage } from "@/lib/profileNames";
+import { rankFor, badgesFor, nextRank, type CookStats, type Override } from "@/lib/ranks";
 
 const OWNER = "0xDB902DC48ef55d5D69F6cB72583518577C6C021c".toLowerCase();
 
@@ -42,6 +43,8 @@ export default function Home() {
   const [recipes, setRecipes] = useState<RecipeX[]>([]);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [hidden, setHidden] = useState<number[]>([]);
+  const [overrides, setOverrides] = useState<Record<string, any>>({});
+  const [tipsGiven, setTipsGiven] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
@@ -64,6 +67,7 @@ export default function Home() {
   const [tipAmt, setTipAmt] = useState("5");
   const [expanded, setExpanded] = useState<number | null>(null);
   const [nameModal, setNameModal] = useState(false);
+  const [ownerPanel, setOwnerPanel] = useState<string | null>(null); // address being edited
   const [nameInput, setNameInput] = useState("");
   const [walletModal, setWalletModal] = useState(false);
 
@@ -100,12 +104,14 @@ export default function Home() {
       const count = Number(await c.recipeCount());
 
       // side data in parallel
-      const [profRes, modRes] = await Promise.all([
+      const [profRes, modRes, ovRes] = await Promise.all([
         fetch("/api/profiles").then((r) => r.json()).catch(() => ({ profiles: {} })),
         fetch("/api/moderation").then((r) => r.json()).catch(() => ({ hidden: [] })),
+        fetch("/api/ranks").then((r) => r.json()).catch(() => ({ overrides: {} })),
       ]);
       setProfiles(profRes.profiles || {});
       setHidden(modRes.hidden || []);
+      setOverrides(ovRes.overrides || {});
 
       if (count === 0) { setRecipes([]); setLoading(false); return; }
 
@@ -117,14 +123,18 @@ export default function Home() {
 
       // tip totals from Tipped events
       let tipMap: Record<number, number> = {};
+      let tipsGivenMap: Record<string, number> = {};
       try {
         const ev = await c.queryFilter(c.filters.Tipped(), 0, "latest");
         for (const e of ev as any[]) {
           const id = Number(e.args?.id);
           const amt = parseFloat(ethers.formatUnits(e.args?.amount ?? 0n, CHAIN.decimals));
           tipMap[id] = (tipMap[id] || 0) + amt;
+          const from = (e.args?.from as string | undefined)?.toLowerCase();
+          if (from) tipsGivenMap[from] = (tipsGivenMap[from] || 0) + 1;
         }
       } catch { tipMap = {}; }
+      setTipsGiven(tipsGivenMap);
 
       const hashes = onChain.map((r: any) => r.contentHash).join(",");
       let texts: Record<string, RecipeContent | null> = {};
@@ -323,6 +333,25 @@ export default function Home() {
     finally { setBusy(false); }
   };
 
+  const saveOverride = async (address: string, ov: Override) => {
+    if (!isOwner) return;
+    setBusy(true);
+    try {
+      const ts = Date.now();
+      const signer = await getSigner();
+      const sig = await signer.signMessage(rankOverrideMessage(address, ts));
+      const res = await fetch("/api/ranks", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address, override: ov, ts, signature: sig }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Override failed.");
+      showToast("Rank/badge updated.", "ok");
+      await loadAll();
+      setOwnerPanel(null);
+    } catch (e: any) { showToast(e?.message || "Override failed.", "err"); }
+    finally { setBusy(false); }
+  };
+
   const askKitchen = async () => {
     if (!aiQ.trim()) return showToast("Tell the kitchen what you'd like.", "info");
     if (!wallet) return showToast("Connect your wallet to use the kitchen.", "info");
@@ -429,6 +458,44 @@ export default function Home() {
     return idx >= 0 ? { rank: idx + 1, of: leaders.length, ...leaders[idx] } : null;
   }, [leaders, wallet]);
 
+  // Per-cook stats for the rank/badge engine, built from loaded data.
+  const cookStats = useMemo(() => {
+    const visible = recipes.filter((r) => !hidden.includes(r.id));
+    const m: Record<string, CookStats> = {};
+    // determine pioneers: the earliest few distinct creators by first recipe time
+    const firstSeen: Record<string, number> = {};
+    [...visible].sort((a, b) => a.createdAt - b.createdAt).forEach((r) => {
+      const k = r.creator.toLowerCase();
+      if (firstSeen[k] === undefined) firstSeen[k] = r.createdAt;
+    });
+    const pioneerSet = new Set(
+      Object.entries(firstSeen).sort((a, b) => a[1] - b[1]).slice(0, 5).map(([k]) => k)
+    );
+    const topCookAddr = leaders[0]?.addr.toLowerCase();
+    visible.forEach((r) => {
+      const k = r.creator.toLowerCase();
+      if (!m[k]) m[k] = { address: r.creator, recipes: 0, tips: 0, upvotes: 0, topRecipeUpvotes: 0, tagCounts: {}, tipsGiven: tipsGiven[k] || 0, isPioneer: pioneerSet.has(k), heldNumberOne: k === topCookAddr };
+      const cs = m[k];
+      cs.recipes += 1;
+      cs.tips += r.tipsTotal;
+      cs.upvotes += r.upvotes;
+      cs.topRecipeUpvotes = Math.max(cs.topRecipeUpvotes, r.upvotes);
+      const tag = (r.tag || "").toLowerCase();
+      ["breakfast", "lunch", "dinner", "dessert", "vegan", "vegetarian", "drinks", "snacks"].forEach((cat) => {
+        if (tag.includes(cat)) cs.tagCounts[cat] = (cs.tagCounts[cat] || 0) + 1;
+      });
+    });
+    return m;
+  }, [recipes, hidden, tipsGiven, leaders]);
+
+  // Helper: rank + badges for an address (applies owner overrides).
+  const rankBadgesFor = (address: string) => {
+    const k = address.toLowerCase();
+    const s = cookStats[k] || { address, recipes: 0, tips: 0, upvotes: 0, topRecipeUpvotes: 0, tagCounts: {} };
+    const ov = overrides[k] as Override | undefined;
+    return { rank: rankFor(s, ov), badges: badgesFor(s, ov), stats: s };
+  };
+
   const myRecipes = useMemo(() =>
     wallet ? recipes.filter((r) => r.creator.toLowerCase() === wallet.toLowerCase()) : [],
     [recipes, wallet]);
@@ -441,6 +508,28 @@ export default function Home() {
   const C = "var(--text)", C2 = "var(--text-2)", C3 = "var(--text-3)";
 
   // ---- shared recipe card renderer ----
+  // Small rank pill (tier-colored) shown next to a chef's name.
+  const RankTag = ({ address }: { address: string }) => {
+    const { rank } = rankBadgesFor(address);
+    const { TIER_STYLE } = require("@/lib/ranks");
+    const ts = TIER_STYLE[rank.tier];
+    return (
+      <span style={{ fontSize: 10, fontWeight: 600, color: ts.color, border: `1px solid ${ts.color}55`, background: `${ts.color}18`, padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap", textShadow: ts.glow ? `0 0 8px ${ts.color}99` : "none" }}>{rank.name}</span>
+    );
+  };
+  // Row of earned badge emojis (with tooltips).
+  const BadgeRow = ({ address, max = 6 }: { address: string; max?: number }) => {
+    const { badges } = rankBadgesFor(address);
+    if (!badges.length) return null;
+    return (
+      <span style={{ display: "inline-flex", gap: 3, alignItems: "center" }}>
+        {badges.slice(0, max).map((b) => (
+          <span key={b.id} title={`${b.name} — ${b.desc}`} style={{ fontSize: 12, cursor: "default" }}>{b.emoji}</span>
+        ))}
+      </span>
+    );
+  };
+
   const RecipeCard = (r: RecipeX) => {
     const open = expanded === r.id;
     const ings = parseList(r.ingredients);
@@ -456,9 +545,11 @@ export default function Home() {
               {r.hashVerified && <span title="Off-chain text matches the on-chain hash" style={{ color: "var(--ok)", fontSize: 13, flexShrink: 0 }}><i className="ti ti-rosette-discount-check" aria-hidden /></span>}
               {isHidden && <span style={{ fontSize: 10, color: "#c98", border: "1px solid #c98", borderRadius: 12, padding: "1px 7px", flexShrink: 0 }}>hidden</span>}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginLeft: 23 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, marginLeft: 23, flexWrap: "wrap" }}>
               <span style={{ width: 20, height: 20, borderRadius: "50%", background: "var(--grad)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 500, color: "#fff", flexShrink: 0 }}>{nameFor(r.creator, profiles).slice(0, 2).toUpperCase()}</span>
               <span style={{ fontSize: 12, color: C2 }}>{nameFor(r.creator, profiles)}</span>
+              <RankTag address={r.creator} />
+              <BadgeRow address={r.creator} />
               {r.tipsTotal > 0 && <span style={{ fontSize: 11, color: "var(--tip)", fontWeight: 500 }}>· {r.tipsTotal.toFixed(2)} LCAI</span>}
             </div>
           </div>
@@ -627,10 +718,11 @@ export default function Home() {
                           <span style={{ fontSize: 16, fontWeight: 600, color: i < 3 ? "var(--brand-2)" : C3, width: 24, textAlign: "center" }}>{i === 0 ? "🏆" : i + 1}</span>
                           <span style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--grad)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, color: "#fff" }}>{nameFor(l.addr, profiles).slice(0, 2).toUpperCase()}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 14, color: C, margin: 0, fontWeight: 500 }}>{nameFor(l.addr, profiles)}</p>
+                            <p style={{ fontSize: 14, color: C, margin: 0, fontWeight: 500, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>{nameFor(l.addr, profiles)} <RankTag address={l.addr} /> <BadgeRow address={l.addr} /></p>
                             <p style={{ fontSize: 11, color: C3, margin: 0 }}>{l.count} recipe{l.count !== 1 ? "s" : ""} · {l.upvotes} upvotes</p>
                           </div>
                           <span style={{ fontSize: 16, fontWeight: 600, color: "var(--tip)" }}>{l.tips.toFixed(2)}</span>
+                          {isOwner && <button onClick={() => setOwnerPanel(l.addr)} title="Manage rank & badges" style={{ background: "transparent", border: "1px solid var(--border-2)", color: C3, padding: "4px 7px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}><i className="ti ti-settings" aria-hidden /></button>}
                         </div>
                       ))}
                     </div>
@@ -671,6 +763,40 @@ export default function Home() {
                 </div>
               ) : (
                 <>
+                  {(() => {
+                    const { rank, badges, stats } = rankBadgesFor(wallet);
+                    const { TIER_STYLE } = require("@/lib/ranks");
+                    const ts = TIER_STYLE[rank.tier];
+                    const nr = nextRank(stats);
+                    // progress: how close to clearing all three of the next rank's thresholds
+                    let pct = 100;
+                    if (nr) {
+                      const pr = Math.min(1, stats.recipes / Math.max(1, nr.minRecipes));
+                      const pt = Math.min(1, stats.tips / Math.max(1, nr.minTips || 1));
+                      const pu = Math.min(1, stats.upvotes / Math.max(1, nr.minUpvotes || 1));
+                      pct = Math.round(((pr + pt + pu) / 3) * 100);
+                    }
+                    return (
+                      <div style={{ background: "var(--bg-raised)", border: `1px solid ${ts.color}55`, borderRadius: 13, padding: "16px 18px", marginBottom: 16 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 18, fontWeight: 700, color: ts.color, textShadow: ts.glow ? `0 0 12px ${ts.color}99` : "none" }}>{rank.name}</span>
+                          {badges.length > 0 && <span style={{ display: "inline-flex", gap: 4 }}>{badges.map((b: any) => <span key={b.id} title={`${b.name} — ${b.desc}`} style={{ fontSize: 15 }}>{b.emoji}</span>)}</span>}
+                        </div>
+                        {nr ? (
+                          <>
+                            <div style={{ marginTop: 12, height: 7, background: "var(--bg-sunken)", borderRadius: 20, overflow: "hidden" }}>
+                              <div style={{ width: `${pct}%`, height: "100%", background: ts.color, borderRadius: 20, transition: "width .4s" }} />
+                            </div>
+                            <p style={{ fontSize: 11.5, color: C3, margin: "8px 0 0", lineHeight: 1.5 }}>
+                              {pct}% to <strong style={{ color: C2 }}>{nr.name}</strong> — need {nr.minRecipes} recipes ({stats.recipes}), {nr.minTips} LCAI tipped ({stats.tips.toFixed(0)}), {nr.minUpvotes} upvotes ({stats.upvotes})
+                            </p>
+                          </>
+                        ) : (
+                          <p style={{ fontSize: 12, color: ts.color, margin: "10px 0 0", fontWeight: 500 }}>★ You've reached the top of the kitchen. Legendary.</p>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
                     {[["Recipes", myStats.count.toString()], ["LCAI earned", myStats.tips.toFixed(2)], ["Upvotes", myStats.upvotes.toString()]].map(([k, v]) => (
                       <div key={k} style={{ flex: 1, minWidth: 100, background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 11, padding: "14px 16px" }}>
@@ -878,6 +1004,54 @@ export default function Home() {
       )}
 
       {/* name modal */}
+      {ownerPanel && isOwner && (() => {
+        const { rank, stats } = rankBadgesFor(ownerPanel);
+        const { RANKS, BADGES } = require("@/lib/ranks");
+        const cur = (overrides[ownerPanel.toLowerCase()] || {}) as Override;
+        const earnedIds = new Set(rankBadgesFor(ownerPanel).badges.map((b: any) => b.id));
+        return (
+          <div onClick={() => setOwnerPanel(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 14, padding: 22, maxWidth: 420, width: "100%", maxHeight: "85vh", overflowY: "auto" }}>
+              <p className="serif" style={{ fontSize: 18, color: C, margin: "0 0 4px" }}>Manage {nameFor(ownerPanel, profiles)}</p>
+              <p style={{ fontSize: 12, color: C2, margin: "0 0 14px" }}>Owner controls. Currently {rank.name} · {stats.recipes} recipes, {stats.tips.toFixed(0)} LCAI, {stats.upvotes} upvotes. You'll sign (free, no gas).</p>
+
+              <label style={{ display: "block", fontSize: 11, color: C2, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 }}>Force rank (optional)</label>
+              <select defaultValue={cur.rankLevel ?? ""} id="ovRank" style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: C, marginBottom: 14 }}>
+                <option value="">— earned rank (no override) —</option>
+                {RANKS.map((r: any) => <option key={r.level} value={r.level}>{r.level}. {r.name}</option>)}
+              </select>
+
+              <label style={{ display: "block", fontSize: 11, color: C2, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 }}>Badges (tap to grant / revoke)</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 18 }}>
+                {BADGES.map((b: any) => {
+                  const granted = (cur.grant || []).includes(b.id);
+                  const revoked = (cur.revoke || []).includes(b.id);
+                  const has = earnedIds.has(b.id);
+                  return (
+                    <button key={b.id} id={`badge-${b.id}`} data-state={granted ? "grant" : revoked ? "revoke" : "auto"} title={b.desc} onClick={(e) => { const el = e.currentTarget; const s = el.getAttribute("data-state"); const ns = s === "auto" ? "grant" : s === "grant" ? "revoke" : "auto"; el.setAttribute("data-state", ns); el.style.opacity = ns === "revoke" ? "0.4" : "1"; el.style.borderColor = ns === "grant" ? "var(--ok)" : "var(--border-2)"; }} style={{ background: "var(--bg-input)", border: `1px solid ${granted ? "var(--ok)" : "var(--border-2)"}`, opacity: revoked ? 0.4 : 1, color: C2, padding: "5px 9px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>{b.emoji} {b.name}{has ? " ✓" : ""}</button>
+                  );
+                })}
+              </div>
+              <p style={{ fontSize: 10.5, color: C3, margin: "0 0 14px", lineHeight: 1.5 }}>Tap a badge: green border = force-grant, faded = force-revoke, normal = auto (earned). ✓ = currently earned.</p>
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                <button onClick={() => setOwnerPanel(null)} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C2, padding: "8px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>Cancel</button>
+                <button disabled={busy} onClick={() => {
+                  const rankSel = (document.getElementById("ovRank") as HTMLSelectElement)?.value;
+                  const grant: string[] = []; const revoke: string[] = [];
+                  BADGES.forEach((b: any) => { const st = document.getElementById(`badge-${b.id}`)?.getAttribute("data-state"); if (st === "grant") grant.push(b.id); if (st === "revoke") revoke.push(b.id); });
+                  const ov: Override = {};
+                  if (rankSel) ov.rankLevel = Number(rankSel);
+                  if (grant.length) ov.grant = grant;
+                  if (revoke.length) ov.revoke = revoke;
+                  saveOverride(ownerPanel, ov);
+                }} style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: busy ? "wait" : "pointer" }}>{busy ? "Saving…" : "Sign & save"}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {nameModal && (
         <div onClick={() => setNameModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 14, padding: 22, maxWidth: 360, width: "100%" }}>

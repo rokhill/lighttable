@@ -12,6 +12,10 @@ export function moderationMessage(action: string, id: number, ts: number): strin
   return `LightTable: ${action} recipe\nId: ${id}\nTime: ${ts}`;
 }
 
+export function rankOverrideMessage(address: string, ts: number): string {
+  return `LightTable: set rank/badge override\nFor: ${address}\nTime: ${ts}`;
+}
+
 export async function signMessage(signer: ethers.JsonRpcSigner, message: string): Promise<string> {
   return signer.signMessage(message);
 }
