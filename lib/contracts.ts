@@ -19,6 +19,11 @@ export const CONTRACTS = {
   recipeBook: "0xD55bd722178c22cE776d2b4a09D984feaDA2e870",
 };
 
+// Treasury that receives the Ask-the-Kitchen fee, and the fee amount.
+// Must match TREASURY_ADDRESS + MIN_PAYMENT_LCAI in the AI service .env.
+export const AI_TREASURY = "0xDB902DC48ef55d5D69F6cB72583518577C6C021c";
+export const AI_FEE_LCAI = "0.1";
+
 // Only the fragments the frontend calls. Matches the deployed contract.
 export const RECIPE_BOOK_ABI = [
   "function submitRecipe(bytes32 contentHash) payable returns (uint256 id)",
@@ -314,4 +319,30 @@ export async function buildTxOverrides(
     gasPrice = ethers.parseUnits("1", "gwei");
   }
   return { gasLimit, gasPrice };
+}
+
+// Pay the Ask-the-Kitchen fee: a plain LCAI transfer to the treasury.
+// Returns the confirmed tx hash + payer address, which the AI service verifies
+// on-chain before running inference. One signature, pre-computed gas so the
+// wallet only prompts once (same trick as the contract writes).
+export async function payForAI(): Promise<{ txHash: string; payer: string }> {
+  const signer = await getSigner();
+  const payer = await signer.getAddress();
+  const value = ethers.parseEther(AI_FEE_LCAI);
+  const rp = getReadProvider();
+  let gasPrice: bigint;
+  try {
+    const fee = await rp.getFeeData();
+    gasPrice = fee.gasPrice ?? ethers.parseUnits("1", "gwei");
+  } catch {
+    gasPrice = ethers.parseUnits("1", "gwei");
+  }
+  const tx = await signer.sendTransaction({
+    to: AI_TREASURY,
+    value,
+    gasLimit: 30000n,
+    gasPrice,
+  });
+  await tx.wait(1);
+  return { txHash: tx.hash, payer };
 }

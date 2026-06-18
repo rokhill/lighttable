@@ -18,6 +18,8 @@ import {
   connectWalletConnect,
   disconnectWallet,
   buildTxOverrides,
+  payForAI,
+  AI_FEE_LCAI,
 } from "@/lib/contracts";
 import { hashContent, verifyContent, type Recipe, type RecipeContent } from "@/lib/recipes";
 import { profileMessage, moderationMessage, nameFor } from "@/lib/profileNames";
@@ -69,6 +71,7 @@ export default function Home() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiEngine, setAiEngine] = useState<string | null>(null);
   const [aiRecipe, setAiRecipe] = useState<{ title: string; ingredients: string; steps: string } | null>(null);
+  const [aiStage, setAiStage] = useState<"pay" | "cook" | null>(null);
 
   const isOwner = wallet?.toLowerCase() === OWNER;
 
@@ -320,26 +323,50 @@ export default function Home() {
 
   const askKitchen = async () => {
     if (!aiQ.trim()) return showToast("Tell the kitchen what you'd like.", "info");
-    setAiBusy(true); setAiOut(null); setAiEngine(null);
+    if (!wallet) return showToast("Connect your wallet to use the kitchen.", "info");
+    setAiBusy(true); setAiOut(null); setAiEngine(null); setAiStage("pay");
     try {
-      const res = await fetch("/api/kitchen", {
+      // 1) Pay the LCAI fee to the treasury (one signature).
+      const { txHash, payer } = await payForAI();
+
+      // 2) Start the job (fast — returns a jobId immediately).
+      setAiStage("cook");
+      const startRes = await fetch("/api/kitchen?action=start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           kind: aiRecipe ? "adapt" : "ask",
           recipe: aiRecipe || null,
           request: aiQ.trim(),
+          paymentTx: txHash,
+          payer,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "The kitchen is closed right now.");
-      setAiOut(data.result || "(no answer came back)");
-      setAiEngine(data.engine || null);
+      const startData = await startRes.json();
+      if (!startRes.ok || !startData.jobId) throw new Error(startData?.error || "The kitchen is closed right now.");
+
+      // 3) Poll for the result (each poll is quick — sidesteps the 60s limit).
+      const jobId = startData.jobId;
+      const deadline = Date.now() + 150000; // up to 2.5 min
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const pr = await fetch(`/api/kitchen?action=result&jobId=${encodeURIComponent(jobId)}`);
+        const pd = await pr.json();
+        if (pd.status === "done") {
+          setAiOut(pd.result || "(no answer came back)");
+          setAiEngine(pd.engine || null);
+          setAiBusy(false); setAiStage(null);
+          return;
+        }
+        if (pd.status === "error") throw new Error(pd.error || "The kitchen is closed right now.");
+        // status "running" or "unknown" (brief) — keep polling
+      }
+      throw new Error("The kitchen took too long this time — please try again.");
     } catch (e: any) {
       setAiOut(null);
-      showToast(e?.message || "The kitchen is closed right now.", "err");
+      showToast(e?.reason || e?.message || "The kitchen is closed right now.", "err");
     } finally {
-      setAiBusy(false);
+      setAiBusy(false); setAiStage(null);
     }
   };
 
@@ -707,9 +734,10 @@ export default function Home() {
                 )}
 
                 <input value={aiQ} onChange={(e) => setAiQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !aiBusy) askKitchen(); }} placeholder={aiRecipe ? "I don't have buttermilk — what can I use instead?" : "How do I keep pasta from sticking?"} style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--ai-border)", borderRadius: 8, padding: "11px 13px", fontSize: 14, color: C, marginBottom: 13 }} />
-                <button onClick={askKitchen} disabled={aiBusy} style={{ background: "var(--grad)", color: "#fff", border: "none", padding: "10px 20px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: aiBusy ? "wait" : "pointer", opacity: aiBusy ? 0.8 : 1 }}>{aiBusy ? "The kitchen is cooking…" : "Ask the kitchen ↗"}</button>
+                <button onClick={askKitchen} disabled={aiBusy} style={{ background: "var(--grad)", color: "#fff", border: "none", padding: "10px 20px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: aiBusy ? "wait" : "pointer", opacity: aiBusy ? 0.8 : 1 }}>{aiBusy ? (aiStage === "pay" ? "Confirm payment in wallet…" : "The kitchen is cooking…") : `Ask the kitchen · ${AI_FEE_LCAI} LCAI ↗`}</button>
 
-                {aiBusy && <p style={{ fontSize: 11, color: C3, margin: "12px 2px 0", lineHeight: 1.55 }}>Running a live inference job on LCAI workers — this can take up to a minute.</p>}
+                {aiBusy && aiStage === "cook" && <p style={{ fontSize: 11, color: C3, margin: "12px 2px 0", lineHeight: 1.55 }}>Running a live inference job on LCAI workers — this can take up to a minute.</p>}
+                {!aiBusy && <p style={{ fontSize: 11, color: C3, margin: "10px 2px 0", lineHeight: 1.55 }}>Each request runs a real LCAI inference job. A small {AI_FEE_LCAI} LCAI fee covers it.</p>}
 
                 {aiOut && (
                   <div style={{ marginTop: 15 }}>
