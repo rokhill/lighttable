@@ -125,9 +125,6 @@ export async function connectWalletConnect(): Promise<void> {
 export async function restoreWalletConnect(): Promise<string | null> {
   try {
     if (typeof window === "undefined") return null;
-    // Only attempt a restore if WalletConnect actually stored a session before.
-    // Checking localStorage first avoids spinning up the WC modal machinery on
-    // a fresh load (which can throw / pop the QR and break the page).
     let hasStored = false;
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i) || "";
@@ -136,11 +133,22 @@ export async function restoreWalletConnect(): Promise<string | null> {
     if (!hasStored) return null;
 
     const wc = await initWalletConnect();
-    if (wc.session && wc.accounts && wc.accounts.length > 0) {
+    // Only adopt the restored session if the provider is ACTUALLY connected and
+    // exposes accounts. A stored-but-not-live session would otherwise throw
+    // "call connect() before request()" on the first real call.
+    const connected = !!(wc.session && wc.connected !== false && wc.accounts && wc.accounts.length > 0);
+    if (!connected) return null;
+
+    // Sanity-check the live connection actually answers before adopting it.
+    try {
+      const accts = await wc.request({ method: "eth_accounts" });
+      if (!Array.isArray(accts) || accts.length === 0) return null;
       activeEip1193 = wc;
-      return wc.accounts[0];
+      return accts[0];
+    } catch {
+      return null; // session not truly live — user will connect manually
     }
-  } catch { /* no session / restore failed — user will connect manually */ }
+  } catch { /* restore failed — user will connect manually */ }
   return null;
 }
 

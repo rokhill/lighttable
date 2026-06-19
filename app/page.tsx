@@ -419,7 +419,13 @@ export default function Home() {
       throw new Error("The kitchen took too long this time — please try again.");
     } catch (e: any) {
       setAiOut(null);
-      showToast(e?.reason || e?.message || "The kitchen is closed right now.", "err");
+      const raw = e?.reason || e?.message || "";
+      // The WalletConnect "call connect() before request()" / coalesce error means
+      // the wallet session went stale — tell the user plainly to reconnect.
+      const msg = /connect\(\)|coalesce|eth_accounts/i.test(raw)
+        ? "Your wallet session expired. Tap your wallet button to reconnect, then try again."
+        : (raw || "The kitchen is closed right now.");
+      showToast(msg, "err");
     } finally {
       setAiBusy(false); setAiStage(null);
     }
@@ -580,7 +586,7 @@ export default function Home() {
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginLeft: 23 }} onClick={(e) => e.stopPropagation()}>
             <button onClick={() => upvote(r)} disabled={busy} style={{ background: "transparent", border: "1px solid var(--border-hover)", color: C2, padding: "5px 9px", borderRadius: 8, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-arrow-up" style={{ fontSize: 13, verticalAlign: -1 }} aria-hidden /> {r.upvotes}</button>
-            <button onClick={() => setCookRecipe(r)} title="Cook Mode — step-by-step, hands-free" style={{ background: "var(--brand)", border: "none", color: "#fff", padding: "5px 11px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-chef-hat" style={{ fontSize: 13, verticalAlign: -1 }} aria-hidden /> Cook</button>
+            <button onClick={() => setCookRecipe(r)} title="Cook Mode — full recipe, big text, timers, hands-free" style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "6px 13px", borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", boxShadow: "0 1px 6px var(--ai-border)" }}><i className="ti ti-chef-hat" style={{ fontSize: 14, verticalAlign: -2, marginRight: 4 }} aria-hidden />Cook Mode</button>
             <button onClick={() => adaptRecipe(r)} title="Adapt this recipe in Ask the Kitchen" style={{ background: "transparent", border: "1px solid var(--ai-border)", color: "var(--brand-2)", padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-sparkles" style={{ fontSize: 12, verticalAlign: -1 }} aria-hidden /> Adapt</button>
             <button onClick={() => { setTipFor(r); setTipAmt("5"); }} style={{ background: "var(--tip-btn)", border: "none", color: "var(--tip-btn-text)", padding: "5px 12px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}>Tip</button>
             {isOwner && <button onClick={() => toggleHide(r)} disabled={busy} title={isHidden ? "Restore" : "Hide"} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C3, padding: "5px 8px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}><i className={isHidden ? "ti ti-eye" : "ti ti-eye-off"} aria-hidden /></button>}
