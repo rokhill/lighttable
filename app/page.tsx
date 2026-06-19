@@ -26,6 +26,7 @@ import {
 import { hashContent, verifyContent, type Recipe, type RecipeContent } from "@/lib/recipes";
 import { profileMessage, moderationMessage, nameFor, rankOverrideMessage } from "@/lib/profileNames";
 import { rankFor, badgesFor, nextRank, type CookStats, type Override } from "@/lib/ranks";
+import CookMode from "./CookMode";
 
 const OWNER = "0xDB902DC48ef55d5D69F6cB72583518577C6C021c".toLowerCase();
 
@@ -71,6 +72,7 @@ export default function Home() {
   const [nameModal, setNameModal] = useState(false);
   const [ownerPanel, setOwnerPanel] = useState<string | null>(null); // address being edited
   const [badgeInfo, setBadgeInfo] = useState<{ emoji: string; name: string; desc: string } | null>(null);
+  const [cookRecipe, setCookRecipe] = useState<RecipeX | null>(null); // recipe open in Cook Mode
   const [nameInput, setNameInput] = useState("");
   const [walletModal, setWalletModal] = useState(false);
 
@@ -576,6 +578,7 @@ export default function Home() {
           </div>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginLeft: 23 }} onClick={(e) => e.stopPropagation()}>
             <button onClick={() => upvote(r)} disabled={busy} style={{ background: "transparent", border: "1px solid var(--border-hover)", color: C2, padding: "5px 9px", borderRadius: 8, fontSize: 12, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-arrow-up" style={{ fontSize: 13, verticalAlign: -1 }} aria-hidden /> {r.upvotes}</button>
+            <button onClick={() => setCookRecipe(r)} title="Cook Mode — step-by-step, hands-free" style={{ background: "var(--brand)", border: "none", color: "#fff", padding: "5px 11px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-chef-hat" style={{ fontSize: 13, verticalAlign: -1 }} aria-hidden /> Cook</button>
             <button onClick={() => adaptRecipe(r)} title="Adapt this recipe in Ask the Kitchen" style={{ background: "transparent", border: "1px solid var(--ai-border)", color: "var(--brand-2)", padding: "5px 10px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-sparkles" style={{ fontSize: 12, verticalAlign: -1 }} aria-hidden /> Adapt</button>
             <button onClick={() => { setTipFor(r); setTipAmt("5"); }} style={{ background: "var(--tip-btn)", border: "none", color: "var(--tip-btn-text)", padding: "5px 12px", borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}>Tip</button>
             {isOwner && <button onClick={() => toggleHide(r)} disabled={busy} title={isHidden ? "Restore" : "Hide"} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C3, padding: "5px 8px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}><i className={isHidden ? "ti ti-eye" : "ti ti-eye-off"} aria-hidden /></button>}
@@ -1093,6 +1096,26 @@ export default function Home() {
             </div>
           </div>
         </div>
+      )}
+
+      {cookRecipe && (
+        <CookMode
+          title={cookRecipe.title}
+          ingredients={(cookRecipe.ingredientList && cookRecipe.ingredientList.length > 0) ? cookRecipe.ingredientList : []}
+          ingredientsFallback={parseList(cookRecipe.ingredients)}
+          steps={parseSteps(cookRecipe.steps)}
+          baseServings={4}
+          onClose={() => setCookRecipe(null)}
+          onAskKitchen={() => {
+            // Hand the recipe to Ask the Kitchen and jump there, keeping their place.
+            setAiRecipe({ title: cookRecipe.title, ingredients: cookRecipe.ingredients, steps: cookRecipe.steps });
+            setAiQ("");
+            setAiOut(null);
+            setAiEngine(null);
+            setCookRecipe(null);
+            setTab("ai");
+          }}
+        />
       )}
 
       {badgeInfo && (
