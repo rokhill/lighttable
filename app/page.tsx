@@ -82,6 +82,7 @@ export default function Home() {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiEngine, setAiEngine] = useState<string | null>(null);
   const [aiRecipe, setAiRecipe] = useState<{ title: string; ingredients: string; steps: string } | null>(null);
+  const [aiMode, setAiMode] = useState<"ask" | "adapt">("adapt"); // intent when a recipe is loaded
   const [aiStage, setAiStage] = useState<"pay" | "starting" | "cook" | null>(null);
 
   const isOwner = wallet?.toLowerCase() === OWNER;
@@ -388,7 +389,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kind: aiRecipe ? "adapt" : "ask",
+          kind: aiRecipe ? aiMode : "ask",
           recipe: aiRecipe || null,
           request: aiQ.trim(),
           paymentTx: txHash,
@@ -427,6 +428,7 @@ export default function Home() {
   // Load a recipe into Ask the Kitchen for substitutions/adaptation.
   const adaptRecipe = (r: Recipe) => {
     setAiRecipe({ title: r.title, ingredients: r.ingredients, steps: r.steps });
+    setAiMode("adapt");
     setAiQ("");
     setAiOut(null);
     setAiEngine(null);
@@ -968,9 +970,15 @@ export default function Home() {
                 </div>
 
                 {aiRecipe && (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "var(--bg-input)", border: "1px solid var(--ai-border)", borderRadius: 8, padding: "8px 11px", marginBottom: 11 }}>
-                    <span style={{ fontSize: 12, color: C2 }}>Adapting: <strong style={{ color: C }}>{aiRecipe.title}</strong></span>
-                    <button onClick={() => setAiRecipe(null)} style={{ background: "transparent", border: "none", color: C3, fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>clear</button>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, background: "var(--bg-input)", border: "1px solid var(--ai-border)", borderRadius: 8, padding: "8px 11px", marginBottom: 11, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12, color: C2 }}>{aiMode === "adapt" ? "Adapting" : "Asking about"}: <strong style={{ color: C }}>{aiRecipe.title}</strong></span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ display: "inline-flex", borderRadius: 7, overflow: "hidden", border: "1px solid var(--border-2)" }}>
+                        <button onClick={() => setAiMode("ask")} style={{ background: aiMode === "ask" ? "var(--grad)" : "transparent", color: aiMode === "ask" ? "#fff" : C3, border: "none", padding: "4px 10px", fontSize: 11, fontWeight: 500, cursor: "pointer" }}>Ask</button>
+                        <button onClick={() => setAiMode("adapt")} style={{ background: aiMode === "adapt" ? "var(--grad)" : "transparent", color: aiMode === "adapt" ? "#fff" : C3, border: "none", padding: "4px 10px", fontSize: 11, fontWeight: 500, cursor: "pointer" }}>Adapt</button>
+                      </span>
+                      <button onClick={() => setAiRecipe(null)} style={{ background: "transparent", border: "none", color: C3, fontSize: 12, cursor: "pointer", textDecoration: "underline" }}>clear</button>
+                    </span>
                   </div>
                 )}
 
@@ -1106,9 +1114,11 @@ export default function Home() {
           steps={parseSteps(cookRecipe.steps)}
           baseServings={4}
           onClose={() => setCookRecipe(null)}
-          onAskKitchen={() => {
-            // Hand the recipe to Ask the Kitchen and jump there, keeping their place.
+          onAskKitchen={(mode) => {
+            // Hand the recipe to Ask the Kitchen as context, with the chosen
+            // intent — "ask" answers a question, "adapt" rewrites the recipe.
             setAiRecipe({ title: cookRecipe.title, ingredients: cookRecipe.ingredients, steps: cookRecipe.steps });
+            setAiMode(mode);
             setAiQ("");
             setAiOut(null);
             setAiEngine(null);

@@ -19,7 +19,7 @@ export interface CookModeProps {
   steps: string[];
   baseServings?: number;
   onClose: () => void;
-  onAskKitchen: () => void;
+  onAskKitchen: (mode: "ask" | "adapt") => void;
 }
 
 function scaleAmount(amount: string, factor: number): string {
@@ -174,11 +174,16 @@ export default function CookMode({ title, ingredients, ingredientsFallback, step
         </div>
       </div>
 
-      {/* pinned Ask the Kitchen */}
+      {/* pinned Ask the Kitchen — two intents */}
       <div style={{ borderTop: "1px solid var(--border)", padding: "14px 18px", background: "var(--bg)" }}>
-        <button onClick={onAskKitchen} style={{ width: "100%", maxWidth: 640, margin: "0 auto", display: "block", background: "var(--ai-panel)", border: "1px solid var(--ai-border)", color: "var(--brand-2)", padding: "13px", borderRadius: 11, fontSize: 15, fontWeight: 500, cursor: "pointer" }}>
-          <i className="ti ti-sparkles" style={{ fontSize: 16, verticalAlign: -2, marginRight: 7 }} aria-hidden />Stuck? Ask the Kitchen
-        </button>
+        <div style={{ maxWidth: 640, margin: "0 auto", display: "flex", gap: 10 }}>
+          <button onClick={() => onAskKitchen("ask")} style={{ flex: 1, background: "var(--ai-panel)", border: "1px solid var(--ai-border)", color: "var(--brand-2)", padding: "13px", borderRadius: 11, fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
+            <i className="ti ti-help-circle" style={{ fontSize: 16, verticalAlign: -2, marginRight: 6 }} aria-hidden />Ask a question
+          </button>
+          <button onClick={() => onAskKitchen("adapt")} style={{ flex: 1, background: "transparent", border: "1px solid var(--border-2)", color: "var(--text-2)", padding: "13px", borderRadius: 11, fontSize: 14, fontWeight: 500, cursor: "pointer" }}>
+            <i className="ti ti-sparkles" style={{ fontSize: 15, verticalAlign: -2, marginRight: 6 }} aria-hidden />Adapt recipe
+          </button>
+        </div>
       </div>
     </div>
   );
