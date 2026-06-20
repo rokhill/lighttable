@@ -183,13 +183,22 @@ export class StaleSessionError extends Error {
 }
 
 export async function getSigner(): Promise<ethers.JsonRpcSigner> {
-  // Just build the signer. We do NOT pre-validate the WalletConnect session
-  // here — provider internals vary and guessing wrong wrongly rejects perfectly
-  // live sessions (which broke tips/AI on mobile). If the session really is
-  // dead, the actual call throws the "call connect()" error, which the UI maps
-  // to a friendly reconnect prompt. Don't break the working path.
-  const provider = getProvider();
-  return provider.getSigner();
+  const eip: any = activeEip1193 || (hasInjected() ? (window as any).ethereum : null);
+  if (!eip) throw new Error("No wallet connected. Tap Connect to choose a wallet.");
+
+  // Ask the underlying provider for its accounts DIRECTLY first. With ethers v6,
+  // BrowserProvider.getSigner() otherwise runs its own eth_accounts discovery on
+  // every call, which WalletConnect rejects after the first time ("call connect()
+  // before request()"). Fetching the account ourselves and passing it to
+  // getSigner(address) skips that re-discovery and keeps tips/AI working.
+  let account: string | undefined;
+  try {
+    const accts: string[] = await eip.request({ method: "eth_accounts" });
+    if (Array.isArray(accts) && accts.length) account = accts[0];
+  } catch { /* fall back to discovery below */ }
+
+  const provider = new ethers.BrowserProvider(eip);
+  return account ? provider.getSigner(account) : provider.getSigner();
 }
 
 // ---------------------------------------------------------------------------
