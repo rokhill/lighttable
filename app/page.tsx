@@ -16,6 +16,7 @@ import {
   hasInjected,
   connectInjected,
   restoreWalletConnect,
+  getActiveEip1193,
   connectWalletConnect,
   disconnectWallet,
   buildTxOverrides,
@@ -1123,6 +1124,7 @@ export default function Home() {
             <label style={{ display: "block", fontSize: 11, color: C2, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 }}>Amount (LCAI)</label>
             <input value={tipAmt} onChange={(e) => setTipAmt(e.target.value)} inputMode="decimal" style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "10px 12px", fontSize: 14, color: C, marginBottom: 8 }} />
             <p style={{ fontSize: 11, color: C3, margin: "0 0 16px" }}>95% to the cook, 5% to the platform — one signature.</p>
+            <p style={{ fontSize: 10, color: C3, margin: "-10px 0 14px", opacity: 0.7 }}>debug: provider={getActiveEip1193() ? "set" : "NULL"} · wc={typeof window !== "undefined" && Object.keys(localStorage).some(k => k.startsWith("wc@2")) ? "stored" : "none"}</p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button onClick={() => setTipFor(null)} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C2, padding: "8px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>Cancel</button>
               <button onClick={doTip} disabled={busy} style={{ background: "var(--tip-btn)", border: "none", color: "var(--tip-btn-text)", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: busy ? "wait" : "pointer" }}>{busy ? "Tipping…" : "Send tip"}</button>
