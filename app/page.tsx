@@ -693,8 +693,7 @@ export default function Home() {
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, padding: "16px 22px", background: "var(--header-bg)", borderBottom: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-            <LogoIcon size={32} />
-            <Logo size={23} />
+            <Logo size={21} />
             <span style={{ fontSize: 10, color: "var(--chip-text)", background: "var(--chip-bg)", padding: "3px 8px", borderRadius: 20, letterSpacing: 0.4 }}>ON LCAI</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
