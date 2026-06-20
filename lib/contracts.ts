@@ -177,7 +177,37 @@ export function getProvider(): ethers.BrowserProvider {
   return new ethers.BrowserProvider(eip);
 }
 
+// Thrown when the WalletConnect session has died — the UI catches this to
+// prompt a clean reconnect instead of showing a raw "call connect()" error.
+export class StaleSessionError extends Error {
+  constructor() { super("WALLET_SESSION_STALE"); this.name = "StaleSessionError"; }
+}
+
 export async function getSigner(): Promise<ethers.JsonRpcSigner> {
+  // If we're on a WalletConnect provider, make sure its session is actually
+  // live. A restored-but-dead session would otherwise throw the cryptic
+  // "Please call connect() before request()" on the first call (tips, upvotes,
+  // AI payment, etc.). Detect it here and fail clean for every write path.
+  const eip: any = activeEip1193;
+  const isWC = eip && (eip.isWalletConnect || eip.session !== undefined || typeof eip.connect === "function");
+  if (isWC) {
+    const looksConnected = eip.connected === true || (eip.session && eip.accounts && eip.accounts.length > 0);
+    if (!looksConnected) {
+      activeEip1193 = null;        // drop the dead session
+      throw new StaleSessionError();
+    }
+    // Prove it answers, with a short timeout, before we try to sign.
+    try {
+      const accts = await Promise.race([
+        eip.request({ method: "eth_accounts" }),
+        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 6000)),
+      ]);
+      if (!Array.isArray(accts) || accts.length === 0) { activeEip1193 = null; throw new StaleSessionError(); }
+    } catch {
+      activeEip1193 = null;
+      throw new StaleSessionError();
+    }
+  }
   const provider = getProvider();
   return provider.getSigner();
 }

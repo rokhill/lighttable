@@ -97,6 +97,19 @@ export default function Home() {
     setToast({ msg, kind }); setTimeout(() => setToast(null), 4200);
   };
 
+  // Turn any wallet/tx error into a friendly message. Detects the dead
+  // WalletConnect session (StaleSessionError or the raw "call connect()" /
+  // coalesce error) and tells the user to reconnect — which also auto-clears
+  // the session so the next Connect is clean.
+  const friendlyErr = (e: any, fallback: string): string => {
+    const raw = e?.name === "StaleSessionError" ? "stale" : (e?.reason || e?.message || "");
+    if (/stale|connect\(\)|coalesce|eth_accounts|session/i.test(raw)) {
+      setWallet(null); // reflect the dropped session in the UI
+      return "Wallet session expired — tap Connect to reconnect, then try again.";
+    }
+    return raw || fallback;
+  };
+
   const parseList = (s: string): string[] => (s || "").split(/,|\n/).map((x) => x.trim()).filter(Boolean);
   const parseSteps = (s: string): string[] => (s || "").split(/\n+/).map((x) => x.trim()).filter(Boolean);
 
@@ -272,7 +285,7 @@ export default function Home() {
       setFTitle(""); setFIngRows([{ amount: "", item: "" }]); setFSteps(""); setFTag(""); setFCat("Dinner");
       setTab("browse"); showToast("Recipe published. Hash anchored on-chain.", "ok");
       await loadAll();
-    } catch (e: any) { showToast(e?.reason || e?.message || "Publish failed.", "err"); }
+    } catch (e: any) { showToast(friendlyErr(e, "Publish failed."), "err"); }
     finally { setBusy(false); }
   };
 
@@ -299,7 +312,7 @@ export default function Home() {
       setTipFor(null);
       showToast(`Tipped ${amt} LCAI — 95% to the cook, 5% platform.`, "ok");
       await loadAll();
-    } catch (e: any) { showToast(e?.reason || e?.message || "Tip failed.", "err"); }
+    } catch (e: any) { showToast(friendlyErr(e, "Tip failed."), "err"); }
     finally { setBusy(false); }
   };
 
@@ -318,7 +331,8 @@ export default function Home() {
       showToast("Upvoted — recorded on-chain.", "ok"); await loadAll();
     } catch (e: any) {
       const m = e?.reason || e?.message || "";
-      showToast(m.includes("AlreadyUpvoted") ? "You've already upvoted this." : (m || "Upvote failed."), m.includes("AlreadyUpvoted") ? "info" : "err");
+      if (m.includes("AlreadyUpvoted")) showToast("You've already upvoted this.", "info");
+      else showToast(friendlyErr(e, "Upvote failed."), "err");
     } finally { setBusy(false); }
   };
 
@@ -451,13 +465,7 @@ export default function Home() {
       throw new Error("The kitchen took too long this time — please try again.");
     } catch (e: any) {
       setAiOut(null);
-      const raw = e?.reason || e?.message || "";
-      // The WalletConnect "call connect() before request()" / coalesce error means
-      // the wallet session went stale — tell the user plainly to reconnect.
-      const msg = /connect\(\)|coalesce|eth_accounts/i.test(raw)
-        ? "Your wallet session expired. Tap your wallet button to reconnect, then try again."
-        : (raw || "The kitchen is closed right now.");
-      showToast(msg, "err");
+      showToast(friendlyErr(e, "The kitchen is closed right now."), "err");
     } finally {
       setAiBusy(false); setAiStage(null);
     }
