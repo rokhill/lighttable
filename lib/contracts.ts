@@ -132,22 +132,21 @@ export async function restoreWalletConnect(): Promise<string | null> {
     }
     if (!hasStored) return null;
 
-    const wc = await initWalletConnect();
-    // Only adopt the restored session if the provider is ACTUALLY connected and
-    // exposes accounts. A stored-but-not-live session would otherwise throw
-    // "call connect() before request()" on the first real call.
-    const connected = !!(wc.session && wc.connected !== false && wc.accounts && wc.accounts.length > 0);
-    if (!connected) return null;
-
-    // Sanity-check the live connection actually answers before adopting it.
-    try {
-      const accts = await wc.request({ method: "eth_accounts" });
-      if (!Array.isArray(accts) || accts.length === 0) return null;
-      activeEip1193 = wc;
-      return accts[0];
-    } catch {
-      return null; // session not truly live — user will connect manually
+    // EthereumProvider.init() rehydrates the stored session. After a mobile
+    // deep-link bounce (which reloads the page and wipes the in-memory provider),
+    // this is what re-attaches it. We adopt it as active and read the account —
+    // without brittle assumptions about which internal flags are set.
+    const wc: any = await initWalletConnect();
+    let acct: string | undefined = (wc.accounts && wc.accounts[0]) || undefined;
+    if (!acct) {
+      try {
+        const accts = await wc.request({ method: "eth_accounts" });
+        if (Array.isArray(accts) && accts.length) acct = accts[0];
+      } catch { /* no live session */ }
     }
+    if (!acct) return null;
+    activeEip1193 = wc;   // re-adopt so transactions have a provider after reload
+    return acct;
   } catch { /* restore failed — user will connect manually */ }
   return null;
 }
@@ -184,30 +183,11 @@ export class StaleSessionError extends Error {
 }
 
 export async function getSigner(): Promise<ethers.JsonRpcSigner> {
-  // If we're on a WalletConnect provider, make sure its session is actually
-  // live. A restored-but-dead session would otherwise throw the cryptic
-  // "Please call connect() before request()" on the first call (tips, upvotes,
-  // AI payment, etc.). Detect it here and fail clean for every write path.
-  const eip: any = activeEip1193;
-  const isWC = eip && (eip.isWalletConnect || eip.session !== undefined || typeof eip.connect === "function");
-  if (isWC) {
-    const looksConnected = eip.connected === true || (eip.session && eip.accounts && eip.accounts.length > 0);
-    if (!looksConnected) {
-      activeEip1193 = null;        // drop the dead session
-      throw new StaleSessionError();
-    }
-    // Prove it answers, with a short timeout, before we try to sign.
-    try {
-      const accts = await Promise.race([
-        eip.request({ method: "eth_accounts" }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 6000)),
-      ]);
-      if (!Array.isArray(accts) || accts.length === 0) { activeEip1193 = null; throw new StaleSessionError(); }
-    } catch {
-      activeEip1193 = null;
-      throw new StaleSessionError();
-    }
-  }
+  // Just build the signer. We do NOT pre-validate the WalletConnect session
+  // here — provider internals vary and guessing wrong wrongly rejects perfectly
+  // live sessions (which broke tips/AI on mobile). If the session really is
+  // dead, the actual call throws the "call connect()" error, which the UI maps
+  // to a friendly reconnect prompt. Don't break the working path.
   const provider = getProvider();
   return provider.getSigner();
 }

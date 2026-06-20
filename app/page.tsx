@@ -102,10 +102,11 @@ export default function Home() {
   // coalesce error) and tells the user to reconnect — which also auto-clears
   // the session so the next Connect is clean.
   const friendlyErr = (e: any, fallback: string): string => {
-    const raw = e?.name === "StaleSessionError" ? "stale" : (e?.reason || e?.message || "");
-    if (/stale|connect\(\)|coalesce|eth_accounts|session/i.test(raw)) {
-      setWallet(null); // reflect the dropped session in the UI
-      return "Wallet session expired — tap Connect to reconnect, then try again.";
+    const raw = e?.reason || e?.message || "";
+    // Only the genuine "session is dead" signatures — be specific so we don't
+    // wrongly tell a connected user to reconnect.
+    if (/call connect\(\)|could not coalesce|session topic|no matching key/i.test(raw)) {
+      return "Wallet session dropped — tap Connect to reconnect, then try again.";
     }
     return raw || fallback;
   };
