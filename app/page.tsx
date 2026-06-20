@@ -88,6 +88,7 @@ export default function Home() {
   const [pantry, setPantry] = useState("");
   const [pantryResults, setPantryResults] = useState<{ recipe: RecipeX; have: number; total: number; missing: string[] }[] | null>(null);
   const [pantryOpen, setPantryOpen] = useState(false);
+  const [confirmAIPay, setConfirmAIPay] = useState(false);
   const [aiStage, setAiStage] = useState<"pay" | "starting" | "cook" | null>(null);
 
   const isOwner = wallet?.toLowerCase() === OWNER;
@@ -1067,7 +1068,7 @@ export default function Home() {
                 )}
 
                 <input value={aiQ} onChange={(e) => setAiQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !aiBusy) askKitchen(); }} placeholder={aiRecipe ? "I don't have buttermilk — what can I use instead?" : "How do I keep pasta from sticking?"} style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--ai-border)", borderRadius: 8, padding: "11px 13px", fontSize: 14, color: C, marginBottom: 13 }} />
-                <button onClick={askKitchen} disabled={aiBusy} style={{ background: "var(--grad)", color: "#fff", border: "none", padding: "10px 20px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: aiBusy ? "wait" : "pointer", opacity: aiBusy ? 0.8 : 1 }}>{aiBusy ? (aiStage === "pay" ? "Confirm payment in wallet…" : aiStage === "starting" ? "Payment received — firing up…" : "The kitchen is cooking…") : `Ask the kitchen · ${AI_FEE_LCAI} LCAI ↗`}</button>
+                <button onClick={() => { if (!aiQ.trim()) { showToast("Tell the kitchen what you'd like.", "info"); return; } if (!wallet) { showToast("Connect your wallet to use the kitchen.", "info"); return; } setConfirmAIPay(true); }} disabled={aiBusy} style={{ background: "var(--grad)", color: "#fff", border: "none", padding: "10px 20px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: aiBusy ? "wait" : "pointer", opacity: aiBusy ? 0.8 : 1 }}>{aiBusy ? (aiStage === "pay" ? "Confirm payment in wallet…" : aiStage === "starting" ? "Payment received — firing up…" : "The kitchen is cooking…") : `Ask the kitchen · ${AI_FEE_LCAI} LCAI ↗`}</button>
 
                 {aiBusy && aiStage === "pay" && <p style={{ fontSize: 11, color: C3, margin: "12px 2px 0", lineHeight: 1.55 }}>Open your wallet app to approve the {AI_FEE_LCAI} LCAI payment, then come back here.</p>}
                 {aiBusy && aiStage === "starting" && <p style={{ fontSize: 11, color: C3, margin: "12px 2px 0", lineHeight: 1.55 }}>Payment confirmed — sending your request to the LCAI workers…</p>}
@@ -1088,6 +1089,23 @@ export default function Home() {
       </div>
 
       {/* tip modal */}
+      {confirmAIPay && (
+        <div onClick={() => setConfirmAIPay(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 55 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 14, padding: 22, maxWidth: 360, width: "100%" }}>
+            <p className="serif" style={{ fontSize: 18, color: C, margin: "0 0 4px" }}>Ask the Kitchen</p>
+            <p style={{ fontSize: 13, color: C2, margin: "0 0 14px", lineHeight: 1.5 }}>This runs a live inference job on LCAI workers. You'll pay <strong style={{ color: C }}>{AI_FEE_LCAI} LCAI</strong> to your wallet's network, then approve in your wallet.</p>
+            <div style={{ background: "var(--bg-input)", borderRadius: 9, padding: "11px 13px", marginBottom: 16 }}>
+              <span style={{ fontSize: 12, color: C3 }}>{aiMode === "adapt" && aiRecipe ? "Adapting" : "Asking"}:</span>
+              <p style={{ fontSize: 13, color: C, margin: "3px 0 0", lineHeight: 1.4 }}>{aiQ.trim()}</p>
+            </div>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={() => setConfirmAIPay(false)} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C2, padding: "8px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => { setConfirmAIPay(false); askKitchen(); }} style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Pay {AI_FEE_LCAI} & ask ↗</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {tipFor && (
         <div onClick={() => setTipFor(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 14, padding: 22, maxWidth: 360, width: "100%" }}>
