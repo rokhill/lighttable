@@ -98,22 +98,30 @@ export default function Home() {
     setToast({ msg, kind }); setTimeout(() => setToast(null), 4200);
   };
 
-  // Turn any wallet/tx error into a friendly message. Detects the dead
-  // WalletConnect session (StaleSessionError or the raw "call connect()" /
-  // coalesce error) and tells the user to reconnect — which also auto-clears
-  // the session so the next Connect is clean.
+  // Error-to-message helper. The "session dropped → reconnect" mapping is
+  // DISABLED — it was firing on freshly-connected wallets and confusing users.
+  // Kept commented in case we want smarter handling later.
   const friendlyErr = (e: any, fallback: string): string => {
     const raw = e?.reason || e?.message || "";
-    // Only the genuine "session is dead" signatures — be specific so we don't
-    // wrongly tell a connected user to reconnect.
-    if (/call connect\(\)|could not coalesce|session topic|no matching key/i.test(raw)) {
-      return "Wallet session dropped — tap Connect to reconnect, then try again.";
-    }
+    // if (/call connect\(\)|could not coalesce|session topic|no matching key/i.test(raw)) {
+    //   return "Wallet session dropped — tap Connect to reconnect, then try again.";
+    // }
     return raw || fallback;
   };
 
   const parseList = (s: string): string[] => (s || "").split(/,|\n/).map((x) => x.trim()).filter(Boolean);
   const parseSteps = (s: string): string[] => (s || "").split(/\n+/).map((x) => x.trim()).filter(Boolean);
+
+  // True on a mobile browser that is NOT already inside a wallet's in-app
+  // browser — i.e. the users who should be nudged to open in their wallet app,
+  // where signing is reliable (mobile-browser WalletConnect often drops on sign).
+  const isMobileBrowser = (): boolean => {
+    if (typeof window === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(ua);
+    const inWalletBrowser = !!(window as any).ethereum; // wallet in-app browsers inject this
+    return isMobile && !inWalletBrowser;
+  };
 
   useEffect(() => { setDark(document.documentElement.classList.contains("dark")); }, []);
 
@@ -193,22 +201,23 @@ export default function Home() {
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
-  // Silently restore a prior WalletConnect session on load — so a returning
-  // mobile user doesn't have to scan/approve every single visit.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        if (hasInjected()) return; // injected wallets reconnect on their own
-        const addr = await restoreWalletConnect();
-        if (!addr || cancelled) return;
-        const bal = await getReadProvider().getBalance(addr);
-        if (cancelled) return;
-        setWallet(addr); setBalance(formatLCAI(bal));
-      } catch { /* no session to restore */ }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  // DISABLED: auto-restore of WalletConnect session on load. It never reliably
+  // worked (still required reconnect on refresh) and its side effects broke
+  // tips/AI on mobile. Kept here in case we revisit with a proper approach.
+  // useEffect(() => {
+  //   let cancelled = false;
+  //   (async () => {
+  //     try {
+  //       if (hasInjected()) return; // injected wallets reconnect on their own
+  //       const addr = await restoreWalletConnect();
+  //       if (!addr || cancelled) return;
+  //       const bal = await getReadProvider().getBalance(addr);
+  //       if (cancelled) return;
+  //       setWallet(addr); setBalance(formatLCAI(bal));
+  //     } catch { /* no session to restore */ }
+  //   })();
+  //   return () => { cancelled = true; };
+  // }, []);
 
   // ---- wallet ----
   // Open the chooser. On desktop with an injected wallet we *could* auto-connect,
@@ -1124,7 +1133,6 @@ export default function Home() {
             <label style={{ display: "block", fontSize: 11, color: C2, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 }}>Amount (LCAI)</label>
             <input value={tipAmt} onChange={(e) => setTipAmt(e.target.value)} inputMode="decimal" style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "10px 12px", fontSize: 14, color: C, marginBottom: 8 }} />
             <p style={{ fontSize: 11, color: C3, margin: "0 0 16px" }}>95% to the cook, 5% to the platform — one signature.</p>
-            <p style={{ fontSize: 10, color: C3, margin: "-10px 0 14px", opacity: 0.7 }}>debug: provider={getActiveEip1193() ? "set" : "NULL"} · wc={typeof window !== "undefined" && Object.keys(localStorage).some(k => k.startsWith("wc@2")) ? "stored" : "none"}</p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button onClick={() => setTipFor(null)} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C2, padding: "8px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>Cancel</button>
               <button onClick={doTip} disabled={busy} style={{ background: "var(--tip-btn)", border: "none", color: "var(--tip-btn-text)", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: busy ? "wait" : "pointer" }}>{busy ? "Tipping…" : "Send tip"}</button>
@@ -1138,7 +1146,14 @@ export default function Home() {
         <div onClick={() => setWalletModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 50 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 14, padding: 22, maxWidth: 360, width: "100%" }}>
             <p className="serif" style={{ fontSize: 18, color: C, margin: "0 0 4px" }}>Connect a wallet</p>
-            <p style={{ fontSize: 12, color: C2, margin: "0 0 18px" }}>Pick how you'd like to connect. On a phone, use WalletConnect.</p>
+            <p style={{ fontSize: 12, color: C2, margin: "0 0 18px" }}>Pick how you'd like to connect.</p>
+            {isMobileBrowser() && (
+              <div style={{ background: "var(--ai-panel)", border: "1px solid var(--ai-border)", borderRadius: 11, padding: "13px 15px", marginBottom: 12 }}>
+                <p style={{ fontSize: 12.5, color: C, margin: "0 0 9px", lineHeight: 1.5, fontWeight: 500 }}>📱 On mobile, tips & AI work best inside your wallet's browser.</p>
+                <button onClick={() => { const u = "lighttable.vercel.app"; window.location.href = `https://metamask.app.link/dapp/${u}`; }} style={{ width: "100%", background: "var(--grad)", border: "none", color: "#fff", padding: "11px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 7 }}>Open in MetaMask app ↗</button>
+                <p style={{ fontSize: 10.5, color: C3, margin: 0, lineHeight: 1.5 }}>Or use WalletConnect below (some mobile browsers drop the connection when signing).</p>
+              </div>
+            )}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <button onClick={() => finishConnect("injected")} disabled={busy || !hasInjected()} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--bg-sunken)", border: "1px solid var(--border-2)", color: C, padding: "13px 15px", borderRadius: 11, fontSize: 14, fontWeight: 500, cursor: hasInjected() ? "pointer" : "not-allowed", opacity: hasInjected() ? 1 : 0.5, textAlign: "left" }}>
                 <i className="ti ti-browser" style={{ fontSize: 20, color: "var(--brand-2)" }} aria-hidden />
