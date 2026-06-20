@@ -85,6 +85,9 @@ export default function Home() {
   const [aiEngine, setAiEngine] = useState<string | null>(null);
   const [aiRecipe, setAiRecipe] = useState<{ title: string; ingredients: string; steps: string } | null>(null);
   const [aiMode, setAiMode] = useState<"ask" | "adapt">("adapt"); // intent when a recipe is loaded
+  const [pantry, setPantry] = useState("");
+  const [pantryResults, setPantryResults] = useState<{ recipe: RecipeX; have: number; total: number; missing: string[] }[] | null>(null);
+  const [pantryOpen, setPantryOpen] = useState(false);
   const [aiStage, setAiStage] = useState<"pay" | "starting" | "cook" | null>(null);
 
   const isOwner = wallet?.toLowerCase() === OWNER;
@@ -375,6 +378,32 @@ export default function Home() {
       setOwnerPanel(null);
     } catch (e: any) { showToast(e?.message || "Override failed.", "err"); }
     finally { setBusy(false); }
+  };
+
+  // "What can I make?" — match the user's pantry against their on-chain recipes
+  // locally (free, instant). Ranks by how much of each recipe they can cover.
+  const matchPantry = () => {
+    const have = pantry.toLowerCase().split(/[,\n]+/).map((s) => s.trim()).filter(Boolean);
+    if (have.length === 0) { setPantryResults(null); return; }
+    const visible = recipes.filter((r) => !hidden.includes(r.id));
+    const scored = visible.map((r) => {
+      const lines = (r.ingredientList && r.ingredientList.length > 0)
+        ? r.ingredientList.map((x) => x.item)
+        : parseList(r.ingredients);
+      const total = lines.length || 1;
+      const missing: string[] = [];
+      let covered = 0;
+      for (const line of lines) {
+        const l = line.toLowerCase();
+        const hit = have.some((h) => h.length > 1 && (l.includes(h) || h.includes(l.split(" ")[0])));
+        if (hit) covered++; else missing.push(line);
+      }
+      return { recipe: r, have: covered, total, missing };
+    })
+      .filter((x) => x.have > 0)
+      .sort((a, b) => (b.have / b.total) - (a.have / a.total) || b.have - a.have)
+      .slice(0, 8);
+    setPantryResults(scored);
   };
 
   const askKitchen = async () => {
@@ -693,6 +722,49 @@ export default function Home() {
           {/* BROWSE */}
           {tab === "browse" && (
             <>
+              {/* What can I make? — pantry match against on-chain recipes (free, instant) */}
+              <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 13, padding: 16, margin: "12px 0 14px" }}>
+                <button onClick={() => setPantryOpen((v) => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
+                  <i className="ti ti-basket" style={{ fontSize: 19, color: "var(--brand-2)" }} aria-hidden />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C }}>What can I make?</span>
+                  <span style={{ fontSize: 11, color: C3 }}>· free</span>
+                  <i className={pantryOpen ? "ti ti-chevron-up" : "ti ti-chevron-down"} style={{ fontSize: 15, color: C3, marginLeft: "auto" }} aria-hidden />
+                </button>
+                {pantryOpen && (
+                  <div style={{ marginTop: 12 }}>
+                    <p style={{ fontSize: 12, color: C3, margin: "0 0 10px", lineHeight: 1.5 }}>List what's in your kitchen — find recipes you can cook right now.</p>
+                    <textarea value={pantry} onChange={(e) => setPantry(e.target.value)} placeholder="eggs, flour, butter, garlic, chicken…" rows={2} style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "10px 12px", fontSize: 14, color: C, marginBottom: 10, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+                    <button onClick={matchPantry} style={{ background: "var(--grad)", color: "#fff", border: "none", padding: "8px 16px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}><i className="ti ti-search" style={{ fontSize: 13, verticalAlign: -1, marginRight: 5 }} aria-hidden />Find recipes</button>
+                    {pantryResults && (
+                      <div style={{ marginTop: 14 }}>
+                        {pantryResults.length === 0 ? (
+                          <p style={{ fontSize: 13, color: C2, lineHeight: 1.5 }}>No matches in the cookbook yet — try the Ask the Kitchen tab for ideas with what you have.</p>
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            <p style={{ fontSize: 10.5, color: C3, textTransform: "uppercase", letterSpacing: 0.7, margin: 0 }}>You can make</p>
+                            {pantryResults.map(({ recipe: r, have, total, missing }) => {
+                              const pct = Math.round((have / total) * 100);
+                              const full = have === total;
+                              return (
+                                <button key={r.id} onClick={() => setCookRecipe(r)} style={{ textAlign: "left", background: "var(--bg-input)", border: `1px solid ${full ? "var(--ok)" : "var(--border-2)"}`, borderRadius: 9, padding: "11px 13px", cursor: "pointer", width: "100%" }}>
+                                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                                    <span style={{ fontSize: 14, fontWeight: 500, color: C }}>{r.title}</span>
+                                    <span style={{ fontSize: 12, fontWeight: 600, color: full ? "var(--ok)" : "var(--brand-2)", whiteSpace: "nowrap" }}>{full ? "✓ all set" : `${pct}%`}</span>
+                                  </div>
+                                  {!full && missing.length > 0 && (
+                                    <p style={{ fontSize: 11, color: C3, margin: "5px 0 0", lineHeight: 1.4 }}>Need: {missing.slice(0, 4).join(", ")}{missing.length > 4 ? `, +${missing.length - 4} more` : ""}</p>
+                                  )}
+                                </button>
+                              );
+                            })}
+                            <p style={{ fontSize: 11, color: C3, margin: "2px 0 0", lineHeight: 1.5 }}>Tap one to jump into Cook Mode.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               <div style={{ display: "flex", gap: 8, margin: "10px 0 12px", alignItems: "center" }}>
                 <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 9, padding: "8px 12px" }}>
                   <i className="ti ti-search" style={{ fontSize: 15, color: C3 }} aria-hidden />
