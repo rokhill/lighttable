@@ -27,6 +27,7 @@ import { hashContent, verifyContent, type Recipe, type RecipeContent } from "@/l
 import { profileMessage, moderationMessage, nameFor, rankOverrideMessage } from "@/lib/profileNames";
 import { rankFor, badgesFor, nextRank, type CookStats, type Override } from "@/lib/ranks";
 import CookMode from "./CookMode";
+import { Badge, BadgeLarge } from "./Badge";
 
 const OWNER = "0xDB902DC48ef55d5D69F6cB72583518577C6C021c".toLowerCase();
 
@@ -72,7 +73,7 @@ export default function Home() {
   const [nameModal, setNameModal] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [ownerPanel, setOwnerPanel] = useState<string | null>(null); // address being edited
-  const [badgeInfo, setBadgeInfo] = useState<{ emoji: string; name: string; desc: string } | null>(null);
+  const [badgeInfo, setBadgeInfo] = useState<{ icon: string; color: string; name: string; desc: string } | null>(null);
   const [cookRecipe, setCookRecipe] = useState<RecipeX | null>(null); // recipe open in Cook Mode
   const [nameInput, setNameInput] = useState("");
   const [walletModal, setWalletModal] = useState(false);
@@ -556,7 +557,7 @@ export default function Home() {
     return (
       <span style={{ display: "inline-flex", gap: 3, alignItems: "center" }}>
         {badges.slice(0, max).map((b) => (
-          <span key={b.id} role="button" title={`${b.name} — ${b.desc}`} onClick={(e) => { e.stopPropagation(); setBadgeInfo({ emoji: b.emoji, name: b.name, desc: b.desc }); }} style={{ fontSize: 12, cursor: "pointer" }}>{b.emoji}</span>
+          <span key={b.id} role="button" title={`${b.name} — ${b.desc}`} onClick={(e) => { e.stopPropagation(); setBadgeInfo({ icon: b.icon, color: b.color, name: b.name, desc: b.desc }); }} style={{ display: "inline-flex", cursor: "pointer" }}><Badge icon={b.icon} color={b.color} size={20} /></span>
         ))}
       </span>
     );
@@ -820,7 +821,7 @@ export default function Home() {
                       <div style={{ background: "var(--bg-raised)", border: `1px solid ${ts.color}55`, borderRadius: 13, padding: "16px 18px", marginBottom: 16 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 18, fontWeight: 700, color: ts.color, textShadow: ts.glow ? `0 0 12px ${ts.color}99` : "none" }}>{rank.name}</span>
-                          {badges.length > 0 && <span style={{ display: "inline-flex", gap: 4 }}>{badges.map((b: any) => <span key={b.id} role="button" title={`${b.name} — ${b.desc}`} onClick={() => setBadgeInfo({ emoji: b.emoji, name: b.name, desc: b.desc })} style={{ fontSize: 15, cursor: "pointer" }}>{b.emoji}</span>)}</span>}
+                          {badges.length > 0 && <span style={{ display: "inline-flex", gap: 5 }}>{badges.map((b: any) => <Badge key={b.id} icon={b.icon} color={b.color} size={22} title={`${b.name} — ${b.desc}`} onClick={() => setBadgeInfo({ icon: b.icon, color: b.color, name: b.name, desc: b.desc })} />)}</span>}
                         </div>
                         {nr ? (
                           <>
@@ -1076,7 +1077,7 @@ export default function Home() {
                   const revoked = (cur.revoke || []).includes(b.id);
                   const has = earnedIds.has(b.id);
                   return (
-                    <button key={b.id} id={`badge-${b.id}`} data-state={granted ? "grant" : revoked ? "revoke" : "auto"} title={b.desc} onClick={(e) => { const el = e.currentTarget; const s = el.getAttribute("data-state"); const ns = s === "auto" ? "grant" : s === "grant" ? "revoke" : "auto"; el.setAttribute("data-state", ns); el.style.opacity = ns === "revoke" ? "0.4" : "1"; el.style.borderColor = ns === "grant" ? "var(--ok)" : "var(--border-2)"; }} style={{ background: "var(--bg-input)", border: `1px solid ${granted ? "var(--ok)" : "var(--border-2)"}`, opacity: revoked ? 0.4 : 1, color: C2, padding: "5px 9px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>{b.emoji} {b.name}{has ? " ✓" : ""}</button>
+                    <button key={b.id} id={`badge-${b.id}`} data-state={granted ? "grant" : revoked ? "revoke" : "auto"} title={b.desc} onClick={(e) => { const el = e.currentTarget; const s = el.getAttribute("data-state"); const ns = s === "auto" ? "grant" : s === "grant" ? "revoke" : "auto"; el.setAttribute("data-state", ns); el.style.opacity = ns === "revoke" ? "0.4" : "1"; el.style.borderColor = ns === "grant" ? "var(--ok)" : "var(--border-2)"; }} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--bg-input)", border: `1px solid ${granted ? "var(--ok)" : "var(--border-2)"}`, opacity: revoked ? 0.4 : 1, color: C2, padding: "5px 9px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}><Badge icon={b.icon} color={b.color} size={16} /> {b.name}{has ? " ✓" : ""}</button>
                   );
                 })}
               </div>
@@ -1170,7 +1171,7 @@ export default function Home() {
                   <p style={{ margin: 0, fontSize: 17, fontWeight: 600, color: C, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nameFor(wallet, profiles)}</p>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 11, fontWeight: 600, color: ts.color, border: `1px solid ${ts.color}55`, background: `${ts.color}18`, padding: "1px 8px", borderRadius: 20, textShadow: ts.glow ? `0 0 8px ${ts.color}99` : "none" }}>{rank.name}</span>
-                    {badges.slice(0, 6).map((b: any) => <span key={b.id} title={b.name} style={{ fontSize: 13 }}>{b.emoji}</span>)}
+                    {badges.slice(0, 6).map((b: any) => <Badge key={b.id} icon={b.icon} color={b.color} size={20} title={b.name} onClick={() => { setAccountOpen(false); setBadgeInfo({ icon: b.icon, color: b.color, name: b.name, desc: b.desc }); }} />)}
                   </div>
                 </div>
               </div>
@@ -1208,7 +1209,7 @@ export default function Home() {
       {badgeInfo && (
         <div onClick={() => setBadgeInfo(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 55 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 14, padding: "24px 22px", maxWidth: 320, width: "100%", textAlign: "center" }}>
-            <div style={{ fontSize: 44, marginBottom: 8 }}>{badgeInfo.emoji}</div>
+            <div style={{ marginBottom: 14, display: "flex", justifyContent: "center" }}><BadgeLarge icon={badgeInfo.icon} color={badgeInfo.color} size={72} /></div>
             <p className="serif" style={{ fontSize: 19, color: C, margin: "0 0 6px" }}>{badgeInfo.name}</p>
             <p style={{ fontSize: 11, color: C3, textTransform: "uppercase", letterSpacing: 0.8, margin: "0 0 8px" }}>How to earn it</p>
             <p style={{ fontSize: 14, color: C2, margin: "0 0 18px", lineHeight: 1.5 }}>{badgeInfo.desc}</p>

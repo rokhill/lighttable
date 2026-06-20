@@ -112,6 +112,8 @@ export function nextRank(s: CookStats): RankDef | null {
 export interface BadgeDef {
   id: string;
   emoji: string;
+  icon: string;   // Tabler icon class (ti ti-*) — crisp, themeable medallion glyph
+  color: string;  // medallion accent color
   name: string;
   desc: string;
   earned: (s: CookStats) => boolean;
@@ -126,21 +128,21 @@ function tagCount(s: CookStats, key: string): number {
 
 export const BADGES: BadgeDef[] = [
   // Specialty — real culinary name where it lands, plain where it doesn't
-  { id: "patissier",   emoji: "🍰", name: "Pâtissier",       desc: `${SPECIALTY_THRESHOLD}+ dessert recipes`,    earned: (s) => tagCount(s, "dessert") >= SPECIALTY_THRESHOLD },
-  { id: "saucier",     emoji: "🥘", name: "Saucier",          desc: `${SPECIALTY_THRESHOLD}+ dinner recipes`,     earned: (s) => tagCount(s, "dinner") >= SPECIALTY_THRESHOLD },
-  { id: "gardemanger", emoji: "🥗", name: "Garde Manger (Salads)", desc: `${SPECIALTY_THRESHOLD}+ salad/veg recipes`, earned: (s) => tagCount(s, "vegetarian") + tagCount(s, "vegan") >= SPECIALTY_THRESHOLD },
-  { id: "grillmaster", emoji: "🍖", name: "Grill Master",     desc: `${SPECIALTY_THRESHOLD}+ dinner recipes`,     earned: (s) => tagCount(s, "lunch") + tagCount(s, "dinner") >= SPECIALTY_THRESHOLD + 2 },
-  { id: "breakfast",   emoji: "🍳", name: "Breakfast Champ",  desc: `${SPECIALTY_THRESHOLD}+ breakfast recipes`,  earned: (s) => tagCount(s, "breakfast") >= SPECIALTY_THRESHOLD },
-  { id: "mixologist",  emoji: "🍸", name: "Mixologist",       desc: `${SPECIALTY_THRESHOLD}+ drink recipes`,      earned: (s) => tagCount(s, "drinks") >= SPECIALTY_THRESHOLD },
-  { id: "plantbased",  emoji: "🥬", name: "Plant-Based Pro",  desc: `${SPECIALTY_THRESHOLD}+ vegan recipes`,      earned: (s) => tagCount(s, "vegan") >= SPECIALTY_THRESHOLD },
-  { id: "snackmaster", emoji: "🍿", name: "Snack Master",     desc: `${SPECIALTY_THRESHOLD}+ snack recipes`,      earned: (s) => tagCount(s, "snacks") >= SPECIALTY_THRESHOLD },
+  { id: "patissier",   emoji: "🍰", icon: "ti ti-cake",            color: "#ff7eb6", name: "Pâtissier",       desc: `${SPECIALTY_THRESHOLD}+ dessert recipes`,    earned: (s) => tagCount(s, "dessert") >= SPECIALTY_THRESHOLD },
+  { id: "saucier",     emoji: "🥘", icon: "ti ti-soup",            color: "#e8804a", name: "Saucier",          desc: `${SPECIALTY_THRESHOLD}+ dinner recipes`,     earned: (s) => tagCount(s, "dinner") >= SPECIALTY_THRESHOLD },
+  { id: "gardemanger", emoji: "🥗", icon: "ti ti-salad",           color: "#5fc97a", name: "Garde Manger (Salads)", desc: `${SPECIALTY_THRESHOLD}+ salad/veg recipes`, earned: (s) => tagCount(s, "vegetarian") + tagCount(s, "vegan") >= SPECIALTY_THRESHOLD },
+  { id: "grillmaster", emoji: "🍖", icon: "ti ti-flame",           color: "#e2533b", name: "Grill Master",     desc: `${SPECIALTY_THRESHOLD}+ dinner recipes`,     earned: (s) => tagCount(s, "lunch") + tagCount(s, "dinner") >= SPECIALTY_THRESHOLD + 2 },
+  { id: "breakfast",   emoji: "🍳", icon: "ti ti-egg-fried",       color: "#f2b134", name: "Breakfast Champ",  desc: `${SPECIALTY_THRESHOLD}+ breakfast recipes`,  earned: (s) => tagCount(s, "breakfast") >= SPECIALTY_THRESHOLD },
+  { id: "mixologist",  emoji: "🍸", icon: "ti ti-glass-cocktail",  color: "#4ec5d4", name: "Mixologist",       desc: `${SPECIALTY_THRESHOLD}+ drink recipes`,      earned: (s) => tagCount(s, "drinks") >= SPECIALTY_THRESHOLD },
+  { id: "plantbased",  emoji: "🥬", icon: "ti ti-plant-2",         color: "#5ab552", name: "Plant-Based Pro",  desc: `${SPECIALTY_THRESHOLD}+ vegan recipes`,      earned: (s) => tagCount(s, "vegan") >= SPECIALTY_THRESHOLD },
+  { id: "snackmaster", emoji: "🍿", icon: "ti ti-cookie",          color: "#d9a441", name: "Snack Master",     desc: `${SPECIALTY_THRESHOLD}+ snack recipes`,      earned: (s) => tagCount(s, "snacks") >= SPECIALTY_THRESHOLD },
   // Achievement
-  { id: "crowdfav",    emoji: "💎", name: "Crowd Favorite",   desc: "A recipe with 10+ upvotes",        earned: (s) => s.topRecipeUpvotes >= 10 },
-  { id: "welltipped",  emoji: "💰", name: "Well-Tipped",      desc: "Earned 100+ LCAI in tips",         earned: (s) => s.tips >= 100 },
-  { id: "prolific",    emoji: "📚", name: "Prolific",         desc: "Posted 10+ recipes",               earned: (s) => s.recipes >= 10 },
-  { id: "generous",    emoji: "🤝", name: "Generous",         desc: "Tipped other cooks 5+ times",      earned: (s) => (s.tipsGiven || 0) >= 5 },
-  { id: "trendsetter", emoji: "🌟", name: "Trendsetter",      desc: "Held #1 on the leaderboard",       earned: (s) => !!s.heldNumberOne },
-  { id: "pioneer",     emoji: "🏆", name: "Pioneer",          desc: "One of LightTable's first cooks",  earned: (s) => !!s.isPioneer },
+  { id: "crowdfav",    emoji: "💎", icon: "ti ti-diamond",         color: "#6aa9ff", name: "Crowd Favorite",   desc: "A recipe with 10+ upvotes",        earned: (s) => s.topRecipeUpvotes >= 10 },
+  { id: "welltipped",  emoji: "💰", icon: "ti ti-coin",            color: "#f2c14e", name: "Well-Tipped",      desc: "Earned 100+ LCAI in tips",         earned: (s) => s.tips >= 100 },
+  { id: "prolific",    emoji: "📚", icon: "ti ti-books",           color: "#a07cff", name: "Prolific",         desc: "Posted 10+ recipes",               earned: (s) => s.recipes >= 10 },
+  { id: "generous",    emoji: "🤝", icon: "ti ti-heart-handshake", color: "#ff8fa3", name: "Generous",         desc: "Tipped other cooks 5+ times",      earned: (s) => (s.tipsGiven || 0) >= 5 },
+  { id: "trendsetter", emoji: "🌟", icon: "ti ti-star",            color: "#ffd24a", name: "Trendsetter",      desc: "Held #1 on the leaderboard",       earned: (s) => !!s.heldNumberOne },
+  { id: "pioneer",     emoji: "🏆", icon: "ti ti-trophy",          color: "#ffb020", name: "Pioneer",          desc: "One of LightTable's first cooks",  earned: (s) => !!s.isPioneer },
 ];
 
 export function earnedBadges(s: CookStats): BadgeDef[] {
