@@ -29,6 +29,7 @@ import { profileMessage, moderationMessage, nameFor, rankOverrideMessage } from 
 import { rankFor, badgesFor, nextRank, type CookStats, type Override } from "@/lib/ranks";
 import CookMode from "./CookMode";
 import { Badge, BadgeLarge } from "./Badge";
+import { Logo } from "./Logo";
 
 const OWNER = "0xDB902DC48ef55d5D69F6cB72583518577C6C021c".toLowerCase();
 
@@ -692,7 +693,7 @@ export default function Home() {
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12, padding: "16px 22px", background: "var(--header-bg)", borderBottom: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
-            <span style={{ width: 32, height: 32, borderRadius: 9, background: "var(--grad)", display: "inline-flex", alignItems: "center", justifyContent: "center" }}><i className="ti ti-flame" style={{ fontSize: 19, color: "#fff" }} aria-hidden /></span>
+            <Logo size={34} />
             <span style={{ fontSize: 21, fontWeight: 500, color: C }}>LightTable</span>
             <span style={{ fontSize: 10, color: "var(--chip-text)", background: "var(--chip-bg)", padding: "3px 8px", borderRadius: 20, letterSpacing: 0.4 }}>ON LCAI</span>
           </div>
