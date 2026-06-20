@@ -1148,10 +1148,11 @@ export default function Home() {
             <p className="serif" style={{ fontSize: 18, color: C, margin: "0 0 4px" }}>Connect a wallet</p>
             <p style={{ fontSize: 12, color: C2, margin: "0 0 18px" }}>Pick how you'd like to connect.</p>
             {isMobileBrowser() && (
-              <div style={{ background: "var(--ai-panel)", border: "1px solid var(--ai-border)", borderRadius: 11, padding: "13px 15px", marginBottom: 12 }}>
-                <p style={{ fontSize: 12.5, color: C, margin: "0 0 9px", lineHeight: 1.5, fontWeight: 500 }}>📱 On mobile, tips & AI work best inside your wallet's browser.</p>
-                <button onClick={() => { const u = "lighttable.vercel.app"; window.location.href = `https://metamask.app.link/dapp/${u}`; }} style={{ width: "100%", background: "var(--grad)", border: "none", color: "#fff", padding: "11px", borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 7 }}>Open in MetaMask app ↗</button>
-                <p style={{ fontSize: 10.5, color: C3, margin: 0, lineHeight: 1.5 }}>Or use WalletConnect below (some mobile browsers drop the connection when signing).</p>
+              <div style={{ background: "var(--ai-panel)", border: "1px solid var(--ai-border)", borderRadius: 11, padding: "14px 16px", marginBottom: 12 }}>
+                <p style={{ fontSize: 13, color: C, margin: "0 0 4px", lineHeight: 1.5, fontWeight: 600 }}>📱 Best on mobile: open in your wallet app</p>
+                <p style={{ fontSize: 11.5, color: C2, margin: "0 0 11px", lineHeight: 1.5 }}>Tap below — it opens LightTable right inside MetaMask automatically. No searching, no typing the name. Tips & AI just work in there.</p>
+                <button onClick={() => { const u = "lighttable.vercel.app"; window.location.href = `https://metamask.app.link/dapp/${u}`; }} style={{ width: "100%", background: "var(--grad)", border: "none", color: "#fff", padding: "12px", borderRadius: 9, fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 8 }}>Open in MetaMask — takes you right there ↗</button>
+                <p style={{ fontSize: 10.5, color: C3, margin: 0, lineHeight: 1.5 }}>Already in a wallet browser? Use the options below.</p>
               </div>
             )}
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
