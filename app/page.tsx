@@ -70,6 +70,7 @@ export default function Home() {
   const [tipAmt, setTipAmt] = useState("5");
   const [expanded, setExpanded] = useState<number | null>(null);
   const [nameModal, setNameModal] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [ownerPanel, setOwnerPanel] = useState<string | null>(null); // address being edited
   const [badgeInfo, setBadgeInfo] = useState<{ emoji: string; name: string; desc: string } | null>(null);
   const [cookRecipe, setCookRecipe] = useState<RecipeX | null>(null); // recipe open in Cook Mode
@@ -653,7 +654,11 @@ export default function Home() {
                 {!profiles[wallet.toLowerCase()]?.trim() && (
                   <button onClick={() => { setNameInput(""); setNameModal(true); }} title="Pick a chef name so people know who's cooking" style={{ background: "var(--chip-bg)", color: "var(--chip-text)", border: "1px solid var(--ai-border)", padding: "5px 10px", borderRadius: 20, fontSize: 11, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}><i className="ti ti-chef-hat" style={{ fontSize: 12, verticalAlign: -1, marginRight: 3 }} aria-hidden />Set chef name</button>
                 )}
-                <button onClick={() => { setNameInput(profiles[wallet.toLowerCase()] || ""); setNameModal(true); }} title="Click to set or edit your chef name" style={{ background: "var(--bg-sunken)", color: C, border: "none", padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>{nameFor(wallet, profiles)} · {balance}</button>
+                <button onClick={() => setAccountOpen(true)} title="Your account" style={{ background: "var(--bg-sunken)", color: C, border: "none", padding: "8px 14px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 7 }}>
+                  <span style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--grad)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 600, color: "#fff" }}>{nameFor(wallet, profiles).slice(0, 2).toUpperCase()}</span>
+                  <span style={{ maxWidth: 110, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{nameFor(wallet, profiles)}</span>
+                  <i className="ti ti-chevron-down" style={{ fontSize: 13, color: C3 }} aria-hidden />
+                </button>
               </div>
             ) : (
               <button onClick={connect} style={{ background: "var(--grad)", color: "#fff", border: "none", padding: "8px 17px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Connect wallet</button>
@@ -1133,6 +1138,72 @@ export default function Home() {
           }}
         />
       )}
+
+      {accountOpen && wallet && (() => {
+        const { rank, badges, stats } = rankBadgesFor(wallet);
+        const { TIER_STYLE } = require("@/lib/ranks");
+        const ts = TIER_STYLE[rank.tier];
+        const nr = nextRank(stats);
+        // Pick the single nearest gap to frame as a quest.
+        let quest: string | null = null;
+        let pct = 100;
+        if (nr) {
+          const gaps = [
+            { label: nr.minRecipes - stats.recipes === 1 ? "recipe" : "recipes", need: nr.minRecipes - stats.recipes, frac: stats.recipes / Math.max(1, nr.minRecipes) },
+            { label: "LCAI in tips", need: Math.ceil(nr.minTips - stats.tips), frac: stats.tips / Math.max(1, nr.minTips || 1) },
+            { label: nr.minUpvotes - stats.upvotes === 1 ? "upvote" : "upvotes", need: nr.minUpvotes - stats.upvotes, frac: stats.upvotes / Math.max(1, nr.minUpvotes || 1) },
+          ].filter((g) => g.need > 0).sort((a, b) => b.frac - a.frac); // nearest to done first
+          pct = Math.round((((stats.recipes / Math.max(1, nr.minRecipes)) + (stats.tips / Math.max(1, nr.minTips || 1)) + (stats.upvotes / Math.max(1, nr.minUpvotes || 1))) / 3) * 100);
+          if (gaps.length) quest = `${gaps[0].need} more ${gaps[0].label} to ${nr.name}`;
+          else quest = `Almost ${nr.name}!`;
+        }
+        return (
+          <div onClick={() => setAccountOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 60, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+            <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-raised)", borderTopLeftRadius: 20, borderTopRightRadius: 20, width: "100%", maxWidth: 460, padding: "10px 20px 26px", boxShadow: "0 -8px 40px rgba(0,0,0,0.3)", animation: "sheetUp .22s ease-out" }}>
+              {/* grab handle */}
+              <div style={{ width: 40, height: 4, background: "var(--border-2)", borderRadius: 4, margin: "0 auto 18px" }} />
+
+              {/* identity */}
+              <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 16 }}>
+                <span style={{ width: 48, height: 48, borderRadius: "50%", background: "var(--grad)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 600, color: "#fff", flexShrink: 0 }}>{nameFor(wallet, profiles).slice(0, 2).toUpperCase()}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 17, fontWeight: 600, color: C, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nameFor(wallet, profiles)}</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: ts.color, border: `1px solid ${ts.color}55`, background: `${ts.color}18`, padding: "1px 8px", borderRadius: 20, textShadow: ts.glow ? `0 0 8px ${ts.color}99` : "none" }}>{rank.name}</span>
+                    {badges.slice(0, 6).map((b: any) => <span key={b.id} title={b.name} style={{ fontSize: 13 }}>{b.emoji}</span>)}
+                  </div>
+                </div>
+              </div>
+
+              {/* balance */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--bg-sunken)", borderRadius: 11, padding: "12px 16px", marginBottom: 12 }}>
+                <span style={{ fontSize: 13, color: C2 }}>Balance</span>
+                <span style={{ fontSize: 15, fontWeight: 600, color: C }}>{balance} LCAI</span>
+              </div>
+
+              {/* next-rank quest */}
+              {quest && (
+                <div style={{ background: "var(--bg-sunken)", borderRadius: 11, padding: "13px 16px", marginBottom: 18 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
+                    <span style={{ fontSize: 15 }}>🎯</span>
+                    <span style={{ fontSize: 13, color: C, fontWeight: 500 }}>{quest}</span>
+                  </div>
+                  <div style={{ height: 7, background: "var(--bg-raised)", borderRadius: 20, overflow: "hidden" }}>
+                    <div style={{ width: `${pct}%`, height: "100%", background: ts.color, borderRadius: 20, transition: "width .4s" }} />
+                  </div>
+                </div>
+              )}
+
+              {/* actions */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                <button onClick={() => { setAccountOpen(false); setTab("kitchen"); }} style={{ display: "flex", alignItems: "center", gap: 11, background: "transparent", border: "1px solid var(--border)", color: C, padding: "13px 16px", borderRadius: 11, fontSize: 14, fontWeight: 500, cursor: "pointer", textAlign: "left" }}><i className="ti ti-tools-kitchen-2" style={{ fontSize: 17, color: C2 }} aria-hidden />My Kitchen</button>
+                <button onClick={() => { setAccountOpen(false); setNameInput(profiles[wallet.toLowerCase()] || ""); setNameModal(true); }} style={{ display: "flex", alignItems: "center", gap: 11, background: "transparent", border: "1px solid var(--border)", color: C, padding: "13px 16px", borderRadius: 11, fontSize: 14, fontWeight: 500, cursor: "pointer", textAlign: "left" }}><i className="ti ti-edit" style={{ fontSize: 17, color: C2 }} aria-hidden />Rename chef</button>
+                <button onClick={async () => { setAccountOpen(false); await disconnect(); }} style={{ display: "flex", alignItems: "center", gap: 11, background: "transparent", border: "1px solid var(--border)", color: "var(--err, #e57)", padding: "13px 16px", borderRadius: 11, fontSize: 14, fontWeight: 500, cursor: "pointer", textAlign: "left" }}><i className="ti ti-logout" style={{ fontSize: 17 }} aria-hidden />Disconnect</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {badgeInfo && (
         <div onClick={() => setBadgeInfo(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 55 }}>
