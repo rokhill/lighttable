@@ -74,6 +74,8 @@ export default function Home() {
   const [fTag, setFTag] = useState("");
   const [fImage, setFImage] = useState<string>("");      // hosted url after upload
   const [fImgBusy, setFImgBusy] = useState(false);
+  const [fIngMode, setFIngMode] = useState<"rows" | "paste">("rows");
+  const [fPaste, setFPaste] = useState("");
 
   // modals
   const [tipFor, setTipFor] = useState<RecipeX | null>(null);
@@ -299,6 +301,27 @@ export default function Home() {
     } finally { setFImgBusy(false); }
   };
 
+  // Parse a pasted ingredients list into {amount, item} rows. Heuristic: the
+  // leading quantity (numbers, fractions, ranges) plus an optional unit becomes
+  // the amount; the rest is the item. Users can fix any mis-parse in the rows.
+  const parsePastedIngredients = (text: string): { amount: string; item: string }[] => {
+    const UNITS = /^(cups?|c|tbsps?|tablespoons?|tsps?|teaspoons?|oz|ounces?|lbs?|pounds?|g|grams?|kg|ml|l|liters?|pinch(es)?|cloves?|sticks?|cans?|slices?|pieces?|dash(es)?)$/i;
+    return text.split(/\n+/).map((line) => line.trim()).filter(Boolean).map((line) => {
+      // strip leading bullets/dashes
+      const clean = line.replace(/^[-*•·]\s*/, "");
+      const tokens = clean.split(/\s+/);
+      let amt: string[] = [];
+      let i = 0;
+      // grab leading number / fraction / range (e.g. "1", "1/2", "1-2", "1.5")
+      if (i < tokens.length && /^[\d]+([./-][\d]+)?$/.test(tokens[i])) { amt.push(tokens[i]); i++; }
+      // grab a following unit if present
+      if (i < tokens.length && UNITS.test(tokens[i])) { amt.push(tokens[i]); i++; }
+      const item = tokens.slice(i).join(" ");
+      // if nothing parsed as amount, leave amount blank and item = whole line
+      return amt.length ? { amount: amt.join(" "), item: item || clean } : { amount: "", item: clean };
+    });
+  };
+
   const submit = async () => {
     if (!wallet) return showToast("Connect your wallet to publish.", "info");
     if (!fTitle.trim()) return showToast("Give your recipe a title first.", "info");
@@ -334,7 +357,7 @@ export default function Home() {
       const tx = await c.submitRecipe(hash, ov);
       showToast("Publishing to LCAI — this takes a few seconds…", "info");
       await waitForTx(tx.hash);
-      setFTitle(""); setFIngRows([{ amount: "", item: "" }]); setFSteps(""); setFTag(""); setFCat("Dinner"); setFImage("");
+      setFTitle(""); setFIngRows([{ amount: "", item: "" }]); setFSteps(""); setFTag(""); setFCat("Dinner"); setFImage(""); setFPaste(""); setFIngMode("rows");
       setTab("browse"); showToast("Recipe published. Hash anchored on-chain.", "ok");
       await loadAll();
     } catch (e: any) { showToast(friendlyErr(e, "Publish failed."), "err"); }
@@ -1106,20 +1129,37 @@ export default function Home() {
                   )}
                 </div>
                 <div style={{ marginBottom: 15 }}>
-                  <label style={{ display: "block", fontSize: 11, color: C2, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 8 }}>Ingredients</label>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {fIngRows.map((row, i) => (
-                      <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <input value={row.amount} onChange={(e) => { const next = [...fIngRows]; next[i] = { ...next[i], amount: e.target.value }; setFIngRows(next); }} placeholder="2 cups" style={{ width: 90, flexShrink: 0, background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "9px 10px", fontSize: 14, color: C }} />
-                        <input value={row.item} onChange={(e) => { const next = [...fIngRows]; next[i] = { ...next[i], item: e.target.value }; setFIngRows(next); }}
-                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (i === fIngRows.length - 1) setFIngRows([...fIngRows, { amount: "", item: "" }]); } }}
-                          placeholder="all-purpose flour" style={{ flex: 1, background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "9px 10px", fontSize: 14, color: C }} />
-                        <button onClick={() => setFIngRows(fIngRows.length > 1 ? fIngRows.filter((_, j) => j !== i) : [{ amount: "", item: "" }])} aria-label="Remove ingredient" style={{ flexShrink: 0, width: 32, height: 32, background: "transparent", border: "1px solid var(--border-2)", borderRadius: 8, color: C3, cursor: "pointer" }}><i className="ti ti-x" style={{ fontSize: 14 }} aria-hidden /></button>
-                      </div>
-                    ))}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 8, flexWrap: "wrap" }}>
+                    <label style={{ fontSize: 11, color: C2, textTransform: "uppercase", letterSpacing: 0.7 }}>Ingredients</label>
+                    <div style={{ display: "flex", gap: 4, background: "var(--bg-sunken)", borderRadius: 8, padding: 3 }}>
+                      <button onClick={() => setFIngMode("rows")} style={{ background: fIngMode === "rows" ? "var(--grad)" : "transparent", color: fIngMode === "rows" ? "#fff" : C2, border: "none", padding: "5px 11px", borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Line by line</button>
+                      <button onClick={() => setFIngMode("paste")} style={{ background: fIngMode === "paste" ? "var(--grad)" : "transparent", color: fIngMode === "paste" ? "#fff" : C2, border: "none", padding: "5px 11px", borderRadius: 6, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>Paste list</button>
+                    </div>
                   </div>
-                  <button onClick={() => setFIngRows([...fIngRows, { amount: "", item: "" }])} style={{ marginTop: 8, background: "transparent", border: "1px dashed var(--border-hover)", color: C2, padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer", width: "100%" }}><i className="ti ti-plus" style={{ fontSize: 13, verticalAlign: -1 }} aria-hidden /> Add ingredient</button>
-                  <p style={{ fontSize: 11, color: C3, margin: "7px 2px 0" }}>Amount on the left (e.g. “2 cups”), ingredient on the right. Press Enter to add another.</p>
+
+                  {fIngMode === "paste" ? (
+                    <div>
+                      <textarea value={fPaste} onChange={(e) => setFPaste(e.target.value)} rows={6} placeholder={"Paste your list, one per line:\n2 cups flour\n1/2 cup milk\n1 egg\n1 tsp vanilla"} style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "10px 12px", fontSize: 14, color: C, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+                      <button onClick={() => { const parsed = parsePastedIngredients(fPaste); if (parsed.length === 0) { showToast("Paste a list first.", "info"); return; } setFIngRows(parsed); setFIngMode("rows"); showToast(`Parsed ${parsed.length} ingredients — edit any that look off.`, "ok"); }} style={{ marginTop: 8, background: "var(--grad)", border: "none", color: "#fff", padding: "9px 16px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", width: "100%" }}><i className="ti ti-wand" style={{ fontSize: 14, verticalAlign: -2, marginRight: 5 }} aria-hidden />Parse into rows</button>
+                      <p style={{ fontSize: 11, color: C3, margin: "7px 2px 0", lineHeight: 1.5 }}>We'll split each line into amount + ingredient. You can fix any that parsed wrong.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {fIngRows.map((row, i) => (
+                          <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                            <input value={row.amount} onChange={(e) => { const next = [...fIngRows]; next[i] = { ...next[i], amount: e.target.value }; setFIngRows(next); }} placeholder="2 cups" style={{ width: 74, flexShrink: 0, background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "9px 8px", fontSize: 14, color: C, boxSizing: "border-box" }} />
+                            <input value={row.item} onChange={(e) => { const next = [...fIngRows]; next[i] = { ...next[i], item: e.target.value }; setFIngRows(next); }}
+                              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (i === fIngRows.length - 1) setFIngRows([...fIngRows, { amount: "", item: "" }]); } }}
+                              placeholder="all-purpose flour" style={{ flex: 1, minWidth: 0, background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "9px 10px", fontSize: 14, color: C, boxSizing: "border-box" }} />
+                            <button onClick={() => setFIngRows(fIngRows.length > 1 ? fIngRows.filter((_, j) => j !== i) : [{ amount: "", item: "" }])} aria-label="Remove ingredient" style={{ flexShrink: 0, width: 30, height: 30, background: "transparent", border: "1px solid var(--border-2)", borderRadius: 8, color: C3, cursor: "pointer" }}><i className="ti ti-x" style={{ fontSize: 14 }} aria-hidden /></button>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={() => setFIngRows([...fIngRows, { amount: "", item: "" }])} style={{ marginTop: 8, background: "transparent", border: "1px dashed var(--border-hover)", color: C2, padding: "7px 12px", borderRadius: 8, fontSize: 13, cursor: "pointer", width: "100%" }}><i className="ti ti-plus" style={{ fontSize: 13, verticalAlign: -1 }} aria-hidden /> Add ingredient</button>
+                      <p style={{ fontSize: 11, color: C3, margin: "7px 2px 0" }}>Amount on the left (e.g. “2 cups”), ingredient on the right. Press Enter to add another.</p>
+                    </>
+                  )}
                 </div>
 
                 {/* steps with live numbering */}
@@ -1156,6 +1196,7 @@ export default function Home() {
                 <div>
                   <p style={{ fontSize: 11, color: C3, textTransform: "uppercase", letterSpacing: 1, margin: "0 0 8px 2px" }}>Live preview</p>
                   <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border-hover)", borderRadius: 12, padding: "16px 18px" }}>
+                    {fImage && <img src={fImage} alt="recipe" style={{ width: "100%", maxHeight: 220, objectFit: "cover", borderRadius: 10, margin: "0 0 12px", display: "block" }} />}
                     <p className="serif" style={{ fontSize: 18, margin: "0 0 8px", color: C }}>{fTitle.trim() || "Untitled recipe"}</p>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
                       {[fCat, ...parseList(fTag)].filter(Boolean).map((t, i) => <span key={i} style={{ fontSize: 11, color: "var(--chip-text)", background: "var(--chip-bg)", padding: "3px 9px", borderRadius: 20 }}>{t}</span>)}
