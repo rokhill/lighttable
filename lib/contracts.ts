@@ -23,6 +23,19 @@ export const CONTRACTS = {
 // Must match TREASURY_ADDRESS + MIN_PAYMENT_LCAI in the AI service .env.
 export const AI_TREASURY = "0xDB902DC48ef55d5D69F6cB72583518577C6C021c";
 export const AI_FEE_LCAI = "0.1";
+// Per-feature premium pricing (LCAI). Casual asks stay cheap; high-value
+// features (coach, planner) cost more. Used to price + verify each payment.
+export const PREMIUM_FEES: Record<string, string> = {
+  ask: "0.1",
+  adapt: "0.1",
+  coach: "1",
+  plan: "1",
+  pairings: "0.5",
+  nutrition: "0.5",
+};
+export function feeFor(kind: string): string {
+  return PREMIUM_FEES[kind] || AI_FEE_LCAI;
+}
 // Featured Recipe boost — pay to pin your recipe to the homepage slot for a week.
 export const FEATURED_FEE_LCAI = "5";
 export const FEATURED_DAYS = 7;

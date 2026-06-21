@@ -23,6 +23,7 @@ import {
   waitForTx,
   payForAI,
   payTreasury,
+  feeFor,
   FEATURED_FEE_LCAI,
   FEATURED_DAYS,
   AI_FEE_LCAI,
@@ -477,8 +478,8 @@ export default function Home() {
     if (!wallet) return showToast("Connect your wallet to use the kitchen.", "info");
     setAiBusy(true); setAiOut(null); setAiEngine(null); setAiStage("pay");
     try {
-      // 1) Pay the LCAI fee to the treasury (one signature).
-      const { txHash, payer } = await payForAI();
+      // 1) Pay the per-feature LCAI fee to the treasury (one signature).
+      const { txHash, payer } = await payTreasury(feeFor(kind));
 
       // 2) Start the job (fast — returns a jobId immediately).
       setAiStage("starting");
@@ -1179,7 +1180,7 @@ export default function Home() {
                 <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 5 }}>
                   <i className="ti ti-star" style={{ fontSize: 18, color: "var(--brand-2)" }} aria-hidden />
                   <span style={{ fontSize: 14, fontWeight: 600, color: C }}>Premium Menu</span>
-                  <span style={{ fontSize: 10, color: "var(--chip-text)", background: "var(--chip-bg)", padding: "3px 8px", borderRadius: 20 }}>{AI_FEE_LCAI} LCAI each</span>
+                  <span style={{ fontSize: 10, color: "var(--chip-text)", background: "var(--chip-bg)", padding: "3px 8px", borderRadius: 20 }}>pay per use</span>
                 </div>
                 <p style={{ fontSize: 11.5, color: C3, margin: "0 0 14px", lineHeight: 1.5 }}>
                   {aiRecipe ? <>Working with: <strong style={{ color: C2 }}>{aiRecipe.title}</strong></> : "Open a recipe's “Adapt” to use Coach, Pairings, or Nutrition on it. Meal Planner works anytime."}
@@ -1201,7 +1202,8 @@ export default function Home() {
                         style={{ textAlign: "left", background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 10, padding: "12px 13px", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1 }}>
                         <i className={f.icon} style={{ fontSize: 18, color: "var(--brand-2)" }} aria-hidden />
                         <p style={{ fontSize: 13, fontWeight: 600, color: C, margin: "6px 0 2px" }}>{f.label}</p>
-                        <p style={{ fontSize: 10.5, color: C3, margin: 0, lineHeight: 1.4 }}>{f.desc}</p>
+                        <p style={{ fontSize: 10.5, color: C3, margin: "0 0 4px", lineHeight: 1.4 }}>{f.desc}</p>
+                        <span style={{ fontSize: 10.5, fontWeight: 600, color: "var(--brand-2)" }}>{feeFor(f.kind)} LCAI</span>
                       </button>
                     );
                   })}
@@ -1217,10 +1219,10 @@ export default function Home() {
         <div onClick={() => setConfirmPremium(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 55 }}>
           <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 14, padding: 22, maxWidth: 360, width: "100%" }}>
             <p className="serif" style={{ fontSize: 18, color: C, margin: "0 0 4px" }}>{confirmPremium.label}</p>
-            <p style={{ fontSize: 13, color: C2, margin: "0 0 14px", lineHeight: 1.5 }}>Runs a live LCAI inference on <strong style={{ color: C }}>{aiRecipe?.title}</strong>. You'll pay <strong style={{ color: C }}>{AI_FEE_LCAI} LCAI</strong>, then approve in your wallet.</p>
+            <p style={{ fontSize: 13, color: C2, margin: "0 0 14px", lineHeight: 1.5 }}>Runs a live LCAI inference on <strong style={{ color: C }}>{aiRecipe?.title}</strong>. You'll pay <strong style={{ color: C }}>{feeFor(confirmPremium.kind)} LCAI</strong>, then approve in your wallet.</p>
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button onClick={() => setConfirmPremium(null)} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C2, padding: "8px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>Cancel</button>
-              <button onClick={() => { const k = confirmPremium.kind; setConfirmPremium(null); askKitchen({ kind: k, recipe: aiRecipe, request: aiRecipe?.title || "" }); }} style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Pay {AI_FEE_LCAI} & go ↗</button>
+              <button onClick={() => { const k = confirmPremium.kind; setConfirmPremium(null); askKitchen({ kind: k, recipe: aiRecipe, request: aiRecipe?.title || "" }); }} style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Pay {feeFor(confirmPremium.kind)} & go ↗</button>
             </div>
           </div>
         </div>
@@ -1235,7 +1237,7 @@ export default function Home() {
             <textarea value={planReq} onChange={(e) => setPlanReq(e.target.value)} rows={3} placeholder="A week of easy dinners for two…" style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "10px 12px", fontSize: 14, color: C, marginBottom: 14, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button onClick={() => setPremiumPlan(false)} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C2, padding: "8px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>Cancel</button>
-              <button onClick={() => { if (!planReq.trim()) return; const req = planReq.trim(); setPremiumPlan(false); askKitchen({ kind: "plan", recipe: null, request: req }); }} style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Pay {AI_FEE_LCAI} & plan ↗</button>
+              <button onClick={() => { if (!planReq.trim()) return; const req = planReq.trim(); setPremiumPlan(false); askKitchen({ kind: "plan", recipe: null, request: req }); }} style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Pay {feeFor("plan")} & plan ↗</button>
             </div>
           </div>
         </div>
