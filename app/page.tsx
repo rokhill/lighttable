@@ -777,8 +777,19 @@ export default function Home() {
               <button key={t} onClick={() => setTab(t)} style={{ border: "none", padding: "7px 14px", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", background: tab === t ? "var(--bg-raised)" : "transparent", color: t === "ai" && tab !== t ? "var(--brand-2)" : tab === t ? C : C3, whiteSpace: "nowrap" }}>{t === "ai" && <i className="ti ti-sparkles" style={{ fontSize: 12, verticalAlign: -1, marginRight: 3 }} aria-hidden />}{label}</button>
             ))}
           </div>
+          {tab === "browse" && featuredRecipe && (
+            <div onClick={() => setCookRecipe(featuredRecipe.recipe)} style={{ cursor: "pointer", background: "linear-gradient(135deg, rgba(91,75,255,0.14), rgba(238,17,251,0.10))", border: "1px solid var(--ai-border)", borderRadius: 14, padding: 18, margin: "16px 0 0", position: "relative", overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+                <i className="ti ti-star-filled" style={{ fontSize: 14, color: "var(--brand-2)" }} aria-hidden />
+                <span style={{ fontSize: 11, fontWeight: 700, color: "var(--brand-2)", textTransform: "uppercase", letterSpacing: 0.8 }}>{featuredRecipe.paid ? "Featured" : "Recipe of the week"}</span>
+              </div>
+              <p style={{ fontSize: 19, fontWeight: 700, color: C, margin: "0 0 5px", lineHeight: 1.25 }}>{featuredRecipe.recipe.title}</p>
+              <p style={{ fontSize: 12.5, color: C2, margin: 0 }}>by {nameFor(featuredRecipe.recipe.creator, profiles)} · {featuredRecipe.recipe.upvotes} upvotes · {featuredRecipe.recipe.tipsTotal} LCAI tipped</p>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 11, fontSize: 12.5, fontWeight: 600, color: "#fff", background: "var(--grad)", padding: "7px 14px", borderRadius: 8 }}><i className="ti ti-chef-hat" style={{ fontSize: 14 }} aria-hidden />Cook this</span>
+            </div>
+          )}
           {tab !== "ai" && (
-            <button onClick={() => setTab("ai")} style={{ display: "block", margin: "16px auto 0", maxWidth: 440, width: "100%", background: "var(--ai-panel)", border: "1px solid var(--ai-border)", borderRadius: 11, padding: "11px 16px", cursor: "pointer", textAlign: "left" }}>
+            <button onClick={() => setTab("ai")} style={{ display: "block", margin: "12px auto 0", maxWidth: 440, width: "100%", background: "var(--ai-panel)", border: "1px solid var(--ai-border)", borderRadius: 11, padding: "11px 16px", cursor: "pointer", textAlign: "left" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
                 <i className="ti ti-sparkles" style={{ fontSize: 18, color: "var(--brand-2)", flexShrink: 0 }} aria-hidden />
                 <span style={{ flex: 1, minWidth: 0 }}>
@@ -795,21 +806,8 @@ export default function Home() {
           {/* BROWSE */}
           {tab === "browse" && (
             <>
-              {/* Featured recipe — paid boost, or honest fallback to top of week */}
-              {featuredRecipe && (
-                <div onClick={() => setCookRecipe(featuredRecipe.recipe)} style={{ cursor: "pointer", background: "linear-gradient(135deg, rgba(91,75,255,0.14), rgba(238,17,251,0.10))", border: "1px solid var(--ai-border)", borderRadius: 14, padding: 18, margin: "12px 0 14px", position: "relative", overflow: "hidden" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
-                    <i className="ti ti-star-filled" style={{ fontSize: 14, color: "var(--brand-2)" }} aria-hidden />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--brand-2)", textTransform: "uppercase", letterSpacing: 0.8 }}>{featuredRecipe.paid ? "Featured" : "Recipe of the week"}</span>
-                  </div>
-                  <p style={{ fontSize: 19, fontWeight: 700, color: C, margin: "0 0 5px", lineHeight: 1.25 }}>{featuredRecipe.recipe.title}</p>
-                  <p style={{ fontSize: 12.5, color: C2, margin: 0 }}>by {nameFor(featuredRecipe.recipe.creator, profiles)} · {featuredRecipe.recipe.upvotes} upvotes · {featuredRecipe.recipe.tipsTotal} LCAI tipped</p>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 11, fontSize: 12.5, fontWeight: 600, color: "#fff", background: "var(--grad)", padding: "7px 14px", borderRadius: 8 }}><i className="ti ti-chef-hat" style={{ fontSize: 14 }} aria-hidden />Cook this</span>
-                </div>
-              )}
-
               {/* What can I make? — pantry match against on-chain recipes (free, instant) */}
-              <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 13, padding: 16, margin: "0 0 14px" }}>
+              <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 13, padding: 16, margin: "12px 0 14px" }}>
                 <button onClick={() => setPantryOpen((v) => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
                   <i className="ti ti-basket" style={{ fontSize: 19, color: "var(--brand-2)" }} aria-hidden />
                   <span style={{ fontSize: 14, fontWeight: 600, color: C }}>What can I make?</span>
