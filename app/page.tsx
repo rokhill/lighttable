@@ -72,6 +72,8 @@ export default function Home() {
   const [fSteps, setFSteps] = useState("");
   const [fCat, setFCat] = useState("Dinner");
   const [fTag, setFTag] = useState("");
+  const [fImage, setFImage] = useState<string>("");      // hosted url after upload
+  const [fImgBusy, setFImgBusy] = useState(false);
 
   // modals
   const [tipFor, setTipFor] = useState<RecipeX | null>(null);
@@ -272,6 +274,31 @@ export default function Home() {
   };
 
   // ---- submit ----
+  // Upload a recipe photo to imgbb (via our server route) and keep the URL.
+  const uploadPhoto = async (file: File) => {
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) return showToast("Image too big — keep it under 8MB.", "info");
+    setFImgBusy(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(",")[1] || "");
+        r.onerror = () => reject(new Error("read failed"));
+        r.readAsDataURL(file);
+      });
+      const res = await fetch("/api/upload", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64 }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) throw new Error(data?.error || "Upload failed.");
+      setFImage(data.url);
+      showToast("Photo added ✓", "ok");
+    } catch (e: any) {
+      showToast(e?.message || "Couldn't upload the photo.", "err");
+    } finally { setFImgBusy(false); }
+  };
+
   const submit = async () => {
     if (!wallet) return showToast("Connect your wallet to publish.", "info");
     if (!fTitle.trim()) return showToast("Give your recipe a title first.", "info");
@@ -288,7 +315,7 @@ export default function Home() {
       const tag = [fCat, fTag].filter(Boolean).join(", ");
       // Keep a flat `ingredients` string too, for the old display fallback.
       const ingredients = rows.map((r) => [r.amount, r.item].filter(Boolean).join(" ")).join(", ");
-      const content: RecipeContent = { title: fTitle, ingredients, steps: fSteps, ingredientList: rows, tag };
+      const content: RecipeContent = { title: fTitle, ingredients, steps: fSteps, ingredientList: rows, tag, imageUrl: fImage || undefined };
 
       const res = await fetch("/api/recipes", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -307,7 +334,7 @@ export default function Home() {
       const tx = await c.submitRecipe(hash, ov);
       showToast("Publishing to LCAI — this takes a few seconds…", "info");
       await waitForTx(tx.hash);
-      setFTitle(""); setFIngRows([{ amount: "", item: "" }]); setFSteps(""); setFTag(""); setFCat("Dinner");
+      setFTitle(""); setFIngRows([{ amount: "", item: "" }]); setFSteps(""); setFTag(""); setFCat("Dinner"); setFImage("");
       setTab("browse"); showToast("Recipe published. Hash anchored on-chain.", "ok");
       await loadAll();
     } catch (e: any) { showToast(friendlyErr(e, "Publish failed."), "err"); }
@@ -701,6 +728,9 @@ export default function Home() {
         </div>
         {open && (
           <div style={{ padding: "4px 18px 18px 39px", borderTop: "1px solid var(--border)" }}>
+            {r.imageUrl && (
+              <img src={r.imageUrl} alt={r.title} style={{ width: "100%", maxHeight: 260, objectFit: "cover", borderRadius: 10, margin: "14px 0 4px", display: "block" }} />
+            )}
             {r.tag && parseList(r.tag).length > 0 && (
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "14px 0" }}>
                 {parseList(r.tag).map((t, i) => <span key={i} style={{ fontSize: 11, color: "var(--chip-text)", background: "var(--chip-bg)", padding: "3px 9px", borderRadius: 20 }}>{t}</span>)}
@@ -1059,7 +1089,22 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* structured ingredients */}
+                {/* photo (optional) */}
+                <div style={{ marginBottom: 15 }}>
+                  <label style={{ display: "block", fontSize: 11, color: C2, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 }}>Photo <span style={{ textTransform: "none", color: C3 }}>· optional</span></label>
+                  {fImage ? (
+                    <div style={{ position: "relative", display: "inline-block" }}>
+                      <img src={fImage} alt="recipe" style={{ width: "100%", maxHeight: 200, objectFit: "cover", borderRadius: 10, display: "block" }} />
+                      <button onClick={() => setFImage("")} style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.6)", border: "none", color: "#fff", width: 30, height: 30, borderRadius: "50%", cursor: "pointer", fontSize: 14 }}><i className="ti ti-x" aria-hidden /></button>
+                    </div>
+                  ) : (
+                    <label style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: "1.5px dashed var(--border-2)", borderRadius: 10, padding: "20px", cursor: fImgBusy ? "wait" : "pointer", color: C2, fontSize: 13 }}>
+                      <i className={fImgBusy ? "ti ti-loader-2" : "ti ti-camera"} style={{ fontSize: 17 }} aria-hidden />
+                      {fImgBusy ? "Uploading…" : "Add a photo of your dish"}
+                      <input type="file" accept="image/*" disabled={fImgBusy} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPhoto(f); }} style={{ display: "none" }} />
+                    </label>
+                  )}
+                </div>
                 <div style={{ marginBottom: 15 }}>
                   <label style={{ display: "block", fontSize: 11, color: C2, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 8 }}>Ingredients</label>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
