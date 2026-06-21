@@ -74,6 +74,7 @@ export default function Home() {
   const [fTag, setFTag] = useState("");
   const [fImage, setFImage] = useState<string>("");      // hosted url after upload
   const [fImgBusy, setFImgBusy] = useState(false);
+  const [fServings, setFServings] = useState("4");
   const [fIngMode, setFIngMode] = useState<"rows" | "paste">("rows");
   const [fPaste, setFPaste] = useState("");
 
@@ -328,6 +329,8 @@ export default function Home() {
     const rows = fIngRows.map((r) => ({ amount: r.amount.trim(), item: r.item.trim() })).filter((r) => r.item);
     if (rows.length === 0) return showToast("Add at least one ingredient.", "info");
     if (!fSteps.trim()) return showToast("Add at least one step.", "info");
+    const servingsNum = parseInt(fServings, 10);
+    if (!servingsNum || servingsNum < 1) return showToast("How many servings does this make?", "info");
     setBusy(true);
     try {
       // Harden: get the signer FIRST. If the wallet is locked/disconnected,
@@ -338,7 +341,7 @@ export default function Home() {
       const tag = [fCat, fTag].filter(Boolean).join(", ");
       // Keep a flat `ingredients` string too, for the old display fallback.
       const ingredients = rows.map((r) => [r.amount, r.item].filter(Boolean).join(" ")).join(", ");
-      const content: RecipeContent = { title: fTitle, ingredients, steps: fSteps, ingredientList: rows, tag, imageUrl: fImage || undefined };
+      const content: RecipeContent = { title: fTitle, ingredients, steps: fSteps, ingredientList: rows, tag, imageUrl: fImage || undefined, servings: servingsNum };
 
       const res = await fetch("/api/recipes", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -357,7 +360,7 @@ export default function Home() {
       const tx = await c.submitRecipe(hash, ov);
       showToast("Publishing to LCAI — this takes a few seconds…", "info");
       await waitForTx(tx.hash);
-      setFTitle(""); setFIngRows([{ amount: "", item: "" }]); setFSteps(""); setFTag(""); setFCat("Dinner"); setFImage(""); setFPaste(""); setFIngMode("rows");
+      setFTitle(""); setFIngRows([{ amount: "", item: "" }]); setFSteps(""); setFTag(""); setFCat("Dinner"); setFImage(""); setFPaste(""); setFIngMode("rows"); setFServings("4");
       setTab("browse"); showToast("Recipe published. Hash anchored on-chain.", "ok");
       await loadAll();
     } catch (e: any) { showToast(friendlyErr(e, "Publish failed."), "err"); }
@@ -1112,6 +1115,12 @@ export default function Home() {
                   </div>
                 </div>
 
+                <div style={{ marginBottom: 15 }}>
+                  <label style={{ display: "block", fontSize: 11, color: C2, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 }}>Servings <span style={{ color: "var(--brand-2)" }}>*</span></label>
+                  <input type="number" min="1" value={fServings} onChange={(e) => setFServings(e.target.value)} placeholder="4" style={{ width: 100, background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "10px 12px", fontSize: 14, color: C, boxSizing: "border-box" }} />
+                  <p style={{ fontSize: 11, color: C3, margin: "6px 2px 0" }}>How many this recipe makes — Cook Mode uses it to scale servings accurately.</p>
+                </div>
+
                 {/* photo (optional) */}
                 <div style={{ marginBottom: 15 }}>
                   <label style={{ display: "block", fontSize: 11, color: C2, textTransform: "uppercase", letterSpacing: 0.7, marginBottom: 6 }}>Photo <span style={{ textTransform: "none", color: C3 }}>· optional</span></label>
@@ -1473,7 +1482,7 @@ export default function Home() {
           ingredients={(cookRecipe.ingredientList && cookRecipe.ingredientList.length > 0) ? cookRecipe.ingredientList : []}
           ingredientsFallback={parseList(cookRecipe.ingredients)}
           steps={parseSteps(cookRecipe.steps)}
-          baseServings={4}
+          baseServings={cookRecipe.servings && cookRecipe.servings > 0 ? cookRecipe.servings : 4}
           onClose={() => setCookRecipe(null)}
           onAskKitchen={(mode) => {
             // Hand the recipe to Ask the Kitchen as context, with the chosen

@@ -19,6 +19,7 @@ export interface RecipeContent {
   // optional, cosmetic — does NOT affect identity/credit (that's the chain address)
   tag?: string;
   imageUrl?: string;
+  servings?: number;
 }
 
 /** Full recipe = off-chain content + on-chain facts, joined by id. */
