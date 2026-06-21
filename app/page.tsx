@@ -95,6 +95,9 @@ export default function Home() {
   const [pantryResults, setPantryResults] = useState<{ recipe: RecipeX; have: number; total: number; missing: string[] }[] | null>(null);
   const [pantryOpen, setPantryOpen] = useState(false);
   const [confirmAIPay, setConfirmAIPay] = useState(false);
+  const [confirmPremium, setConfirmPremium] = useState<{ kind: string; label: string } | null>(null);
+  const [premiumPlan, setPremiumPlan] = useState(false);
+  const [planReq, setPlanReq] = useState("");
   const [aiStage, setAiStage] = useState<"pay" | "starting" | "cook" | null>(null);
 
   const isOwner = wallet?.toLowerCase() === OWNER;
@@ -465,8 +468,12 @@ export default function Home() {
     } finally { setFeaturing(null); }
   };
 
-  const askKitchen = async () => {
-    if (!aiQ.trim()) return showToast("Tell the kitchen what you'd like.", "info");
+  const askKitchen = async (opts?: { kind?: string; recipe?: any; request?: string; label?: string }) => {
+    const kind = opts?.kind || (aiRecipe ? aiMode : "ask");
+    const recipe = opts?.recipe !== undefined ? opts.recipe : (aiRecipe || null);
+    const request = opts?.request !== undefined ? opts.request : aiQ.trim();
+    const needsRequest = ["ask", "adapt", "plan"].includes(kind);
+    if (needsRequest && !request) return showToast("Tell the kitchen what you'd like.", "info");
     if (!wallet) return showToast("Connect your wallet to use the kitchen.", "info");
     setAiBusy(true); setAiOut(null); setAiEngine(null); setAiStage("pay");
     try {
@@ -479,9 +486,9 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kind: aiRecipe ? aiMode : "ask",
-          recipe: aiRecipe || null,
-          request: aiQ.trim(),
+          kind,
+          recipe,
+          request: request || "(none)",
           paymentTx: txHash,
           payer,
         }),
@@ -1166,10 +1173,73 @@ export default function Home() {
                 )}
               </div>
               <p style={{ fontSize: 11, color: C3, margin: "11px 2px 0", lineHeight: 1.55 }}>Each answer runs as a real inference job on LCAI workers — on-chain AI, not a wrapper around someone else's API.</p>
+
+              {/* PREMIUM MENU — paid AI features, all run through the same on-chain pay+infer flow */}
+              <div style={{ marginTop: 20, background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 13, padding: 19 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 5 }}>
+                  <i className="ti ti-star" style={{ fontSize: 18, color: "var(--brand-2)" }} aria-hidden />
+                  <span style={{ fontSize: 14, fontWeight: 600, color: C }}>Premium Menu</span>
+                  <span style={{ fontSize: 10, color: "var(--chip-text)", background: "var(--chip-bg)", padding: "3px 8px", borderRadius: 20 }}>{AI_FEE_LCAI} LCAI each</span>
+                </div>
+                <p style={{ fontSize: 11.5, color: C3, margin: "0 0 14px", lineHeight: 1.5 }}>
+                  {aiRecipe ? <>Working with: <strong style={{ color: C2 }}>{aiRecipe.title}</strong></> : "Open a recipe's “Adapt” to use Coach, Pairings, or Nutrition on it. Meal Planner works anytime."}
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 9 }}>
+                  {[
+                    { kind: "coach", icon: "ti ti-school", label: "Recipe Coach", desc: "Improve it before you publish", needsRecipe: true },
+                    { kind: "pairings", icon: "ti ti-glass-cocktail", label: "Pairings", desc: "Drinks, sides & dessert", needsRecipe: true },
+                    { kind: "nutrition", icon: "ti ti-heartbeat", label: "Nutrition", desc: "Rough macros per serving", needsRecipe: true },
+                    { kind: "plan", icon: "ti ti-calendar", label: "Meal Planner", desc: "Plan a week of meals", needsRecipe: false },
+                  ].map((f) => {
+                    const disabled = aiBusy || (f.needsRecipe && !aiRecipe);
+                    return (
+                      <button key={f.kind} disabled={disabled}
+                        onClick={() => {
+                          if (f.kind === "plan") { setPremiumPlan(true); return; }
+                          setConfirmPremium({ kind: f.kind, label: f.label });
+                        }}
+                        style={{ textAlign: "left", background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 10, padding: "12px 13px", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1 }}>
+                        <i className={f.icon} style={{ fontSize: 18, color: "var(--brand-2)" }} aria-hidden />
+                        <p style={{ fontSize: 13, fontWeight: 600, color: C, margin: "6px 0 2px" }}>{f.label}</p>
+                        <p style={{ fontSize: 10.5, color: C3, margin: 0, lineHeight: 1.4 }}>{f.desc}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* Premium feature confirm (coach/pairings/nutrition on the loaded recipe) */}
+      {confirmPremium && (
+        <div onClick={() => setConfirmPremium(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 55 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 14, padding: 22, maxWidth: 360, width: "100%" }}>
+            <p className="serif" style={{ fontSize: 18, color: C, margin: "0 0 4px" }}>{confirmPremium.label}</p>
+            <p style={{ fontSize: 13, color: C2, margin: "0 0 14px", lineHeight: 1.5 }}>Runs a live LCAI inference on <strong style={{ color: C }}>{aiRecipe?.title}</strong>. You'll pay <strong style={{ color: C }}>{AI_FEE_LCAI} LCAI</strong>, then approve in your wallet.</p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={() => setConfirmPremium(null)} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C2, padding: "8px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => { const k = confirmPremium.kind; setConfirmPremium(null); askKitchen({ kind: k, recipe: aiRecipe, request: aiRecipe?.title || "" }); }} style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Pay {AI_FEE_LCAI} & go ↗</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Meal planner input */}
+      {premiumPlan && (
+        <div onClick={() => setPremiumPlan(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 55 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 14, padding: 22, maxWidth: 380, width: "100%" }}>
+            <p className="serif" style={{ fontSize: 18, color: C, margin: "0 0 4px" }}>Meal Planner</p>
+            <p style={{ fontSize: 13, color: C2, margin: "0 0 12px", lineHeight: 1.5 }}>What should the kitchen plan? (e.g. "5 quick weeknight dinners, high protein")</p>
+            <textarea value={planReq} onChange={(e) => setPlanReq(e.target.value)} rows={3} placeholder="A week of easy dinners for two…" style={{ width: "100%", background: "var(--bg-input)", border: "1px solid var(--border-2)", borderRadius: 8, padding: "10px 12px", fontSize: 14, color: C, marginBottom: 14, resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }} />
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={() => setPremiumPlan(false)} style={{ background: "transparent", border: "1px solid var(--border-2)", color: C2, padding: "8px 16px", borderRadius: 9, fontSize: 13, cursor: "pointer" }}>Cancel</button>
+              <button onClick={() => { if (!planReq.trim()) return; const req = planReq.trim(); setPremiumPlan(false); askKitchen({ kind: "plan", recipe: null, request: req }); }} style={{ background: "var(--grad)", border: "none", color: "#fff", padding: "8px 18px", borderRadius: 9, fontSize: 13, fontWeight: 500, cursor: "pointer" }}>Pay {AI_FEE_LCAI} & plan ↗</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* tip modal */}
       {confirmAIPay && (
