@@ -23,6 +23,9 @@ export const CONTRACTS = {
 // Must match TREASURY_ADDRESS + MIN_PAYMENT_LCAI in the AI service .env.
 export const AI_TREASURY = "0xDB902DC48ef55d5D69F6cB72583518577C6C021c";
 export const AI_FEE_LCAI = "0.1";
+// Featured Recipe boost — pay to pin your recipe to the homepage slot for a week.
+export const FEATURED_FEE_LCAI = "5";
+export const FEATURED_DAYS = 7;
 
 // Only the fragments the frontend calls. Matches the deployed contract.
 export const RECIPE_BOOK_ABI = [
@@ -407,12 +410,14 @@ export async function buildTxOverrides(
 // Returns the confirmed tx hash + payer address, which the AI service verifies
 // on-chain before running inference. One signature, pre-computed gas so the
 // wallet only prompts once (same trick as the contract writes).
-export async function payForAI(): Promise<{ txHash: string; payer: string }> {
+// Generic LCAI payment to the platform treasury. Used by Ask the Kitchen and
+// the Featured Recipe boost — same proven flow, different amount.
+export async function payTreasury(amountLCAI: string): Promise<{ txHash: string; payer: string }> {
   await ensureLCAI();
   const signer = await getSigner();
   const payer = await signer.getAddress();
 
-  const value = ethers.parseEther(AI_FEE_LCAI);
+  const value = ethers.parseEther(amountLCAI);
   const rp = getReadProvider();
   let gasPrice: bigint;
   try {
@@ -426,8 +431,12 @@ export async function payForAI(): Promise<{ txHash: string; payer: string }> {
     value,
     gasLimit: 30000n,
     gasPrice,
-    chainId: CHAIN.id, // pin to LCAI so the wallet can't send this on Ethereum
+    chainId: CHAIN.id,
   });
   await waitForTx(tx.hash);
   return { txHash: tx.hash, payer };
+}
+
+export async function payForAI(): Promise<{ txHash: string; payer: string }> {
+  return payTreasury(AI_FEE_LCAI);
 }

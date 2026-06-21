@@ -22,6 +22,9 @@ import {
   buildTxOverrides,
   waitForTx,
   payForAI,
+  payTreasury,
+  FEATURED_FEE_LCAI,
+  FEATURED_DAYS,
   AI_FEE_LCAI,
 } from "@/lib/contracts";
 import { hashContent, verifyContent, type Recipe, type RecipeContent } from "@/lib/recipes";
@@ -47,6 +50,7 @@ export default function Home() {
   const [wallet, setWallet] = useState<string | null>(null);
   const [balance, setBalance] = useState("0");
   const [recipes, setRecipes] = useState<RecipeX[]>([]);
+  const [featured, setFeatured] = useState<{ recipeId: number; until: number; payer: string } | null>(null);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [hidden, setHidden] = useState<number[]>([]);
   const [overrides, setOverrides] = useState<Record<string, any>>({});
@@ -195,6 +199,11 @@ export default function Home() {
       });
       merged.sort((a, b) => b.createdAt - a.createdAt);
       setRecipes(merged);
+      // load the current featured slot (if any, non-expired)
+      try {
+        const fr = await fetch("/api/featured").then((r) => r.json());
+        setFeatured(fr?.featured || null);
+      } catch { /* no featured */ }
     } catch {
       showToast("Couldn't reach the LCAI network. Refresh to retry.", "err");
     } finally { setLoading(false); }
@@ -433,6 +442,29 @@ export default function Home() {
     setPantryResults(scored);
   };
 
+  // Pay to feature a recipe on the homepage for FEATURED_DAYS. Reuses the same
+  // treasury-payment flow as Ask the Kitchen, then records it via the API
+  // (which verifies the payment on-chain before featuring).
+  const [featuring, setFeaturing] = useState<number | null>(null);
+  const featureRecipe = async (id: number) => {
+    if (!wallet) return showToast("Connect your wallet to feature a recipe.", "info");
+    setFeaturing(id);
+    try {
+      showToast("Confirm the payment in your wallet…", "info");
+      const { txHash } = await payTreasury(FEATURED_FEE_LCAI);
+      const res = await fetch("/api/featured", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipeId: id, txHash }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || "Couldn't feature.");
+      showToast(`Featured for ${FEATURED_DAYS} days! 🌟`, "ok");
+      await loadAll();
+    } catch (e: any) {
+      showToast(friendlyErr(e, "Couldn't feature the recipe."), "err");
+    } finally { setFeaturing(null); }
+  };
+
   const askKitchen = async () => {
     if (!aiQ.trim()) return showToast("Tell the kitchen what you'd like.", "info");
     if (!wallet) return showToast("Connect your wallet to use the kitchen.", "info");
@@ -533,6 +565,18 @@ export default function Home() {
       .slice()
       .sort((a, b) => b.tipsTotal - a.tipsTotal || b.upvotes - a.upvotes);
   }, [recipes, hidden]);
+
+  // The homepage featured recipe: a paid boost if one is active and still
+  // visible, otherwise honestly fall back to the real top recipe of the week.
+  // (We never show a fake/empty featured slot.)
+  const featuredRecipe = useMemo(() => {
+    if (featured) {
+      const r = recipes.find((x) => x.id === featured.recipeId && !hidden.includes(x.id));
+      if (r) return { recipe: r, paid: true };
+    }
+    const top = topRecipes[0];
+    return top ? { recipe: top, paid: false } : null;
+  }, [featured, recipes, hidden, topRecipes]);
 
   // The connected user's rank among cooks (for the "your rank" line).
   const myRank = useMemo(() => {
@@ -678,6 +722,15 @@ export default function Home() {
             })()}
             {steps.length > 0 && (<div><p style={{ fontSize: 11, color: C3, textTransform: "uppercase", letterSpacing: 0.8, margin: "0 0 8px" }}>Steps</p><ol style={{ margin: 0, padding: 0, listStyle: "none" }}>{steps.map((x, i) => <li key={i} style={{ fontSize: 14, color: C2, lineHeight: 1.6, marginBottom: 10, display: "flex", gap: 10 }}><span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: "50%", background: "var(--bg-sunken)", color: C, fontSize: 12, fontWeight: 500, display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{i + 1}</span><span>{x}</span></li>)}</ol></div>)}
             {ings.length === 0 && steps.length === 0 && !(r.ingredientList && r.ingredientList.length > 0) && <p style={{ fontSize: 13, color: C3, margin: "14px 0 0" }}>No details yet.</p>}
+            {wallet && r.creator.toLowerCase() === wallet.toLowerCase() && !isHidden && (
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+                <button onClick={() => featureRecipe(r.id)} disabled={featuring === r.id} style={{ display: "inline-flex", alignItems: "center", gap: 7, background: "linear-gradient(135deg, rgba(91,75,255,0.16), rgba(238,17,251,0.12))", border: "1px solid var(--ai-border)", color: "var(--brand-2)", padding: "8px 14px", borderRadius: 9, fontSize: 12.5, fontWeight: 600, cursor: featuring === r.id ? "wait" : "pointer" }}>
+                  <i className="ti ti-star" style={{ fontSize: 14 }} aria-hidden />
+                  {featuring === r.id ? "Featuring…" : `Feature on homepage · ${FEATURED_FEE_LCAI} LCAI`}
+                </button>
+                <p style={{ fontSize: 10.5, color: C3, margin: "7px 0 0", lineHeight: 1.5 }}>Pin your recipe to the top of the homepage for {FEATURED_DAYS} days.</p>
+              </div>
+            )}
           </div>
         )}
       </article>
@@ -742,8 +795,21 @@ export default function Home() {
           {/* BROWSE */}
           {tab === "browse" && (
             <>
+              {/* Featured recipe — paid boost, or honest fallback to top of week */}
+              {featuredRecipe && (
+                <div onClick={() => setCookRecipe(featuredRecipe.recipe)} style={{ cursor: "pointer", background: "linear-gradient(135deg, rgba(91,75,255,0.14), rgba(238,17,251,0.10))", border: "1px solid var(--ai-border)", borderRadius: 14, padding: 18, margin: "12px 0 14px", position: "relative", overflow: "hidden" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+                    <i className="ti ti-star-filled" style={{ fontSize: 14, color: "var(--brand-2)" }} aria-hidden />
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "var(--brand-2)", textTransform: "uppercase", letterSpacing: 0.8 }}>{featuredRecipe.paid ? "Featured" : "Recipe of the week"}</span>
+                  </div>
+                  <p style={{ fontSize: 19, fontWeight: 700, color: C, margin: "0 0 5px", lineHeight: 1.25 }}>{featuredRecipe.recipe.title}</p>
+                  <p style={{ fontSize: 12.5, color: C2, margin: 0 }}>by {nameFor(featuredRecipe.recipe.creator, profiles)} · {featuredRecipe.recipe.upvotes} upvotes · {featuredRecipe.recipe.tipsTotal} LCAI tipped</p>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 11, fontSize: 12.5, fontWeight: 600, color: "#fff", background: "var(--grad)", padding: "7px 14px", borderRadius: 8 }}><i className="ti ti-chef-hat" style={{ fontSize: 14 }} aria-hidden />Cook this</span>
+                </div>
+              )}
+
               {/* What can I make? — pantry match against on-chain recipes (free, instant) */}
-              <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 13, padding: 16, margin: "12px 0 14px" }}>
+              <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 13, padding: 16, margin: "0 0 14px" }}>
                 <button onClick={() => setPantryOpen((v) => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
                   <i className="ti ti-basket" style={{ fontSize: 19, color: "var(--brand-2)" }} aria-hidden />
                   <span style={{ fontSize: 14, fontWeight: 600, color: C }}>What can I make?</span>

@@ -142,11 +142,41 @@ export async function getAllOverrides(): Promise<Record<string, RankOverride>> {
 
 export async function setOverride(address: string, ov: RankOverride): Promise<void> {
   const addr = address.toLowerCase();
-  // empty override => delete the entry
   const empty = (ov.rankLevel == null) && !(ov.grant && ov.grant.length) && !(ov.revoke && ov.revoke.length);
   if (empty) {
     await redis().hdel(OVERRIDES_KEY, addr);
     return;
   }
   await redis().hset(OVERRIDES_KEY, { [addr]: JSON.stringify(ov) });
+}
+
+// ---------------------------------------------------------------------------
+// Featured Recipe — a paid homepage slot. A user pays LCAI to pin their recipe
+// to the top of the homepage for FEATURED_DAYS. Stored as a single record with
+// an expiry; when expired (or none paid), the homepage falls back to showing
+// the real top recipe of the week (honest — never a fake/empty slot).
+//
+//   FEATURED_KEY (string): JSON { recipeId, until (ms), payer, txHash }
+// ---------------------------------------------------------------------------
+const FEATURED_KEY = "featured";
+
+export interface FeaturedRecord {
+  recipeId: number;
+  until: number;    // epoch ms when the boost expires
+  payer: string;
+  txHash: string;
+}
+
+export async function getFeatured(): Promise<FeaturedRecord | null> {
+  try {
+    const raw = await redis().get<string>(FEATURED_KEY);
+    if (!raw) return null;
+    const rec: FeaturedRecord = typeof raw === "string" ? JSON.parse(raw) : (raw as any);
+    if (!rec || rec.until < Date.now()) return null; // expired
+    return rec;
+  } catch { return null; }
+}
+
+export async function setFeatured(rec: FeaturedRecord): Promise<void> {
+  await redis().set(FEATURED_KEY, JSON.stringify(rec));
 }
