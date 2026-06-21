@@ -814,8 +814,18 @@ export default function Home() {
           {/* BROWSE */}
           {tab === "browse" && (
             <>
+              {/* Premium Menu teaser — doorway to the full menu in the AI tab */}
+              <button onClick={() => setTab("ai")} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, background: "linear-gradient(135deg, rgba(91,75,255,0.12), rgba(238,17,251,0.09))", border: "1px solid var(--ai-border)", borderRadius: 13, padding: "13px 16px", cursor: "pointer", textAlign: "left", margin: "12px 0 14px" }}>
+                <i className="ti ti-star" style={{ fontSize: 19, color: "var(--brand-2)", flexShrink: 0 }} aria-hidden />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 14, fontWeight: 600, color: C }}>Premium Menu</span>
+                  <span style={{ display: "block", fontSize: 11.5, color: C2, lineHeight: 1.45 }}>Recipe Coach, Meal Planner, Pairings & Nutrition — powered by LCAI.</span>
+                </span>
+                <i className="ti ti-arrow-right" style={{ fontSize: 15, color: "var(--brand-2)", flexShrink: 0 }} aria-hidden />
+              </button>
+
               {/* What can I make? — pantry match against on-chain recipes (free, instant) */}
-              <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 13, padding: 16, margin: "12px 0 14px" }}>
+              <div style={{ background: "var(--bg-raised)", border: "1px solid var(--border)", borderRadius: 13, padding: 16, margin: "0 0 14px" }}>
                 <button onClick={() => setPantryOpen((v) => !v)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 9, background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
                   <i className="ti ti-basket" style={{ fontSize: 19, color: "var(--brand-2)" }} aria-hidden />
                   <span style={{ fontSize: 14, fontWeight: 600, color: C }}>What can I make?</span>
