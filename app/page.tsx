@@ -1392,7 +1392,7 @@ export default function Home() {
               <div style={{ background: "var(--ai-panel)", border: "1px solid var(--ai-border)", borderRadius: 11, padding: "14px 16px", marginBottom: 12 }}>
                 <p style={{ fontSize: 13, color: C, margin: "0 0 4px", lineHeight: 1.5, fontWeight: 600 }}>📱 Best on mobile: open in your wallet app</p>
                 <p style={{ fontSize: 11.5, color: C2, margin: "0 0 11px", lineHeight: 1.5 }}>Tap below — it opens LightTable right inside MetaMask automatically. No searching, no typing the name. Tips & AI just work in there.</p>
-                <button onClick={() => { const u = "lighttable.vercel.app"; window.location.href = `https://metamask.app.link/dapp/${u}`; }} style={{ width: "100%", background: "var(--grad)", border: "none", color: "#fff", padding: "12px", borderRadius: 9, fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 8 }}>Open in MetaMask — takes you right there ↗</button>
+                <button onClick={() => { const u = "lighttable.fyi"; window.location.href = `https://metamask.app.link/dapp/${u}`; }} style={{ width: "100%", background: "var(--grad)", border: "none", color: "#fff", padding: "12px", borderRadius: 9, fontSize: 14, fontWeight: 600, cursor: "pointer", marginBottom: 8 }}>Open in MetaMask — takes you right there ↗</button>
                 <p style={{ fontSize: 10.5, color: C3, margin: 0, lineHeight: 1.5 }}>Already in a wallet browser? Use the options below.</p>
               </div>
             )}

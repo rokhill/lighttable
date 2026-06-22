@@ -111,7 +111,7 @@ async function initWalletConnect(): Promise<any> {
   const origin =
     typeof window !== "undefined" && window.location?.origin
       ? window.location.origin
-      : "https://lighttable.vercel.app";
+      : "https://lighttable.fyi";
   return EthereumProvider.init({
     projectId: WC_PROJECT_ID,
     optionalChains: [CHAIN.id],
