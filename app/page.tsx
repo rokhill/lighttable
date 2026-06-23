@@ -930,9 +930,9 @@ export default function Home() {
                   {search && <button onClick={() => setSearch("")} style={{ background: "transparent", border: "none", color: C3, cursor: "pointer", fontSize: 14 }}>✕</button>}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 6 }}>
+              <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, paddingRight: 16, marginBottom: 6, WebkitOverflowScrolling: "touch" }}>
                 {CATEGORIES.map((ct) => (
-                  <button key={ct} onClick={() => setCat(ct)} style={{ whiteSpace: "nowrap", border: "1px solid var(--border-2)", background: cat === ct ? "var(--grad)" : "transparent", color: cat === ct ? "#fff" : C2, padding: "5px 12px", borderRadius: 20, fontSize: 12, cursor: "pointer" }}>{ct}</button>
+                  <button key={ct} onClick={() => setCat(ct)} style={{ flexShrink: 0, whiteSpace: "nowrap", border: "1px solid var(--border-2)", background: cat === ct ? "var(--grad)" : "transparent", color: cat === ct ? "#fff" : C2, padding: "5px 12px", borderRadius: 20, fontSize: 12, cursor: "pointer" }}>{ct}</button>
                 ))}
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 12 }}>
