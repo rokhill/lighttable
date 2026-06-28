@@ -43,7 +43,7 @@ type Toast = { msg: string; kind: "ok" | "err" | "info" } | null;
 // recipe + on-chain tip totals we compute from events
 interface RecipeX extends Recipe { tipsTotal: number; ingredientList?: { amount: string; item: string }[]; }
 
-const CATEGORIES = ["All", "Breakfast", "Lunch", "Dinner", "Dessert", "Vegan", "Vegetarian", "Drinks", "Snacks"];
+const CATEGORIES = ["All", "Breakfast", "Appetizers", "Soups & Stews", "Salads", "Lunch", "Dinner", "Sides", "Marinades & Sauces", "Bread & Baking", "Snacks", "Dessert", "Vegan", "Vegetarian", "Drinks"];
 
 export default function Home() {
   const [tab, setTab] = useState<Tab>("browse");
